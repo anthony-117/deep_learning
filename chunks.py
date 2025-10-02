@@ -94,6 +94,14 @@ class RAGProcessor:
             length_function=len
         )
         chunks = text_splitter.split_documents(documents)
+
+        # 2.5. Enhance chunks with position information
+        for i, chunk in enumerate(chunks):
+            # Add chunk position info
+            chunk.metadata['chunk_id'] = i
+            # Calculate approximate line numbers based on content
+            lines_before = chunk.page_content.count('\n')
+            chunk.metadata['approx_lines'] = lines_before + 1
         print(f"PDF split into {len(chunks)} chunks with size {chunk_size} and overlap {chunk_overlap}.")
         
         # 3. Create a vector store from the chunks

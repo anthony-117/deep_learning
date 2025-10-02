@@ -119,11 +119,21 @@ for message in st.session_state.messages:
                     if chunk['metadata']:
                         page_num = chunk['metadata'].get('page', 'Unknown')
                         source_file = chunk['metadata'].get('source', 'Unknown')
+                        chunk_id = chunk['metadata'].get('chunk_id', 'Unknown')
+                        approx_lines = chunk['metadata'].get('approx_lines', 'Unknown')
                         filename = os.path.basename(source_file) if source_file != 'Unknown' else 'Unknown'
 
                         st.markdown(f"""
-                        <div style="background-color: #f0f2f6; padding: 8px; border-radius: 4px; margin: 5px 0;">
-                            <strong>📄 Source:</strong> {filename} | <strong>📍 Page:</strong> {page_num + 1 if page_num != 'Unknown' else 'Unknown'}
+                        <div style="background-color: #e8f4fd; border: 1px solid #1f77b4; padding: 12px; border-radius: 6px; margin: 8px 0; color: #1f77b4;">
+                            <div style="font-weight: bold; margin-bottom: 4px;">
+                                📄 <span style="color: #d62728;">{filename}</span> |
+                                📍 Page <span style="color: #d62728;">{page_num + 1 if isinstance(page_num, int) else page_num}</span> |
+                                📝 ~{approx_lines} lines |
+                                🔍 Chunk #{chunk_id}
+                            </div>
+                            <div style="font-size: 0.85em; color: #666; margin-top: 4px;">
+                                Text Preview: "{chunk['content'][:100]}{'...' if len(chunk['content']) > 100 else ''}"
+                            </div>
                         </div>
                         """, unsafe_allow_html=True)
                     st.divider()
@@ -162,11 +172,21 @@ if prompt := st.chat_input("Ask a question about your document...", disabled=not
                         if chunk['metadata']:
                             page_num = chunk['metadata'].get('page', 'Unknown')
                             source_file = chunk['metadata'].get('source', 'Unknown')
+                            chunk_id = chunk['metadata'].get('chunk_id', 'Unknown')
+                            approx_lines = chunk['metadata'].get('approx_lines', 'Unknown')
                             filename = os.path.basename(source_file) if source_file != 'Unknown' else 'Unknown'
 
                             st.markdown(f"""
-                            <div style="background-color: #f0f2f6; padding: 8px; border-radius: 4px; margin: 5px 0;">
-                                <strong>📄 Source:</strong> {filename} | <strong>📍 Page:</strong> {page_num + 1 if page_num != 'Unknown' else 'Unknown'}
+                            <div style="background-color: #e8f4fd; border: 1px solid #1f77b4; padding: 12px; border-radius: 6px; margin: 8px 0; color: #1f77b4;">
+                                <div style="font-weight: bold; margin-bottom: 4px;">
+                                    📄 <span style="color: #d62728;">{filename}</span> |
+                                    📍 Page <span style="color: #d62728;">{page_num + 1 if isinstance(page_num, int) else page_num}</span> |
+                                    📝 ~{approx_lines} lines |
+                                    🔍 Chunk #{chunk_id}
+                                </div>
+                                <div style="font-size: 0.85em; color: #666; margin-top: 4px;">
+                                    Text Preview: "{chunk['content'][:100]}{'...' if len(chunk['content']) > 100 else ''}"
+                                </div>
                             </div>
                             """, unsafe_allow_html=True)
                         st.divider()
