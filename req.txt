@@ -7,3 +7,7 @@ sentence-transformers
 python-dotenv
 reportlab
 PyMuPDF
+tabula-py
+pillow
+opencv-python
+camelot-py[cv]
