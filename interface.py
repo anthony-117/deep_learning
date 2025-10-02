@@ -117,7 +117,15 @@ for message in st.session_state.messages:
                             key=f"hist_chunk_{chunk['rank']}_{hash(chunk['content'][:50])}"
                         )
                     if chunk['metadata']:
-                        st.caption(f"Source: {chunk['metadata']}")
+                        page_num = chunk['metadata'].get('page', 'Unknown')
+                        source_file = chunk['metadata'].get('source', 'Unknown')
+                        filename = os.path.basename(source_file) if source_file != 'Unknown' else 'Unknown'
+
+                        st.markdown(f"""
+                        <div style="background-color: #f0f2f6; padding: 8px; border-radius: 4px; margin: 5px 0;">
+                            <strong>📄 Source:</strong> {filename} | <strong>📍 Page:</strong> {page_num + 1 if page_num != 'Unknown' else 'Unknown'}
+                        </div>
+                        """, unsafe_allow_html=True)
                     st.divider()
         elif "context" in message:
             with st.expander("Show Retrieved Context"):
@@ -152,7 +160,15 @@ if prompt := st.chat_input("Ask a question about your document...", disabled=not
                                 key=f"chunk_{chunk['rank']}_{hash(chunk['content'][:50])}"
                             )
                         if chunk['metadata']:
-                            st.caption(f"Source: {chunk['metadata']}")
+                            page_num = chunk['metadata'].get('page', 'Unknown')
+                            source_file = chunk['metadata'].get('source', 'Unknown')
+                            filename = os.path.basename(source_file) if source_file != 'Unknown' else 'Unknown'
+
+                            st.markdown(f"""
+                            <div style="background-color: #f0f2f6; padding: 8px; border-radius: 4px; margin: 5px 0;">
+                                <strong>📄 Source:</strong> {filename} | <strong>📍 Page:</strong> {page_num + 1 if page_num != 'Unknown' else 'Unknown'}
+                            </div>
+                            """, unsafe_allow_html=True)
                         st.divider()
                 else:
                     st.write("No context retrieved.")
