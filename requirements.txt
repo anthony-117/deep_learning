@@ -6,7 +6,19 @@ faiss-cpu
 sentence-transformers
 python-dotenv
 reportlab
+PyMuPDF
+tabula-py
+pillow
+opencv-python
+camelot-py[cv]
 
 # Additional embedding providers (optional - install as needed)
 langchain-openai    # For OpenAI embeddings and Cerebras LLM
 langchain-cohere    # For Cohere embeddings
+
+# Vector Database Dependencies (install as needed)
+qdrant-client
+chromadb
+pinecone-client
+weaviate-client
+pymilvus
