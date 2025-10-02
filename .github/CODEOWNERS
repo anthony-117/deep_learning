@@ -1,0 +1,7 @@
+# Global ownership - these users have write access to the entire repository
+* @anthony @faresmaady1 @chadiawar977
+
+# You can add more specific rules here if needed
+# For example:
+# *.py @anthony @faresmaady1
+# /docs/ @chadiawar977
