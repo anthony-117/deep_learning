@@ -1,0 +1,12 @@
+langchain
+langchain-groq
+langchain-community
+pypdf
+faiss-cpu
+sentence-transformers
+python-dotenv
+reportlab
+
+# Additional embedding providers (optional - install as needed)
+langchain-openai    # For OpenAI embeddings and Cerebras LLM
+langchain-cohere    # For Cohere embeddings
