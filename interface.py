@@ -30,8 +30,32 @@ with st.sidebar:
     with st.expander("Settings", expanded=True):
         # LLM Configuration
         st.subheader("LLM Settings")
-        model_name = "openai/gpt-oss-20b" , 
+        model_name = "openai/gpt-oss-20b"
         temperature = st.slider("Temperature", min_value=0.0, max_value=1.0, value=0.1, step=0.05)
+
+        # Vector Database Configuration
+        st.subheader("Vector Database")
+        vector_db_options = ['faiss', 'qdrant', 'chroma', 'weaviate', 'milvus']
+        selected_vector_db = st.selectbox(
+            "Choose Vector Database",
+            options=vector_db_options,
+            index=0,
+            help="Select the vector database for document storage and retrieval"
+        )
+
+        # Show requirements for selected vector database
+        if selected_vector_db != 'faiss':
+            db_requirements = {
+                'qdrant': "Requires: pip install qdrant-client",
+                'chroma': "Requires: pip install chromadb",
+                'pinecone': "Requires: pip install pinecone-client + API keys",
+                'weaviate': "Requires: pip install weaviate-client",
+                'milvus': "Requires: pip install pymilvus + running Milvus server"
+            }
+            st.info(f"📦 {db_requirements.get(selected_vector_db, '')}")
+
+            if selected_vector_db in ['pinecone', 'qdrant', 'weaviate']:
+                st.warning("⚠️ Make sure to configure the required environment variables in .env file")
 
         # RAG Configuration
         st.subheader("RAG Settings")
@@ -56,15 +80,15 @@ with st.sidebar:
                     # Store current configuration
                     current_config = {
                         "model": "openai/gpt-oss-20b", "temp": temperature, "chunk_size": chunk_size,
-                        "overlap": chunk_overlap, "top_k": top_k
+                        "overlap": chunk_overlap, "top_k": top_k, "vector_db": selected_vector_db
                     }
                     st.session_state.config = current_config
 
                     # Initialize and setup the RAG pipeline with parameters from the UI
                     processor = RAGProcessor(
-                         groq_api_key=groq_api_key,
-                        temperature=temperature
-
+                        groq_api_key=groq_api_key,
+                        temperature=temperature,
+                        vector_db=selected_vector_db
                     )
                     processor.setup_rag_pipeline(
                         pdf_path=uploaded_file.name,
@@ -96,7 +120,7 @@ if not st.session_state.rag_processor:
 else:
     # Display the configuration that was used for the current chat session
     config = st.session_state.config
-    st.info(f"**Current Configuration:** Model: `{config['model']}`, Temp: `{config['temp']}`, "
+    st.info(f"**Current Configuration:** Model: `{config['model']}`, Vector DB: `{config['vector_db']}`, Temp: `{config['temp']}`, "
             f"Chunk Size: `{config['chunk_size']}`, Overlap: `{config['overlap']}`, Top K: `{config['top_k']}`")
 
 # Display existing chat messages
@@ -104,7 +128,7 @@ for message in st.session_state.messages:
     with st.chat_message(message["role"]):
         st.markdown(message["content"])
         if "context" in message:
-             with st.expander("Show Retrieved Context"):
+            with st.expander("Show Retrieved Context"):
                 st.json(message["context"])
 
 # Chat input for the user
