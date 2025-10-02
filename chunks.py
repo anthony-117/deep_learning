@@ -10,8 +10,29 @@ from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_community.vectorstores import FAISS
 from langchain_community.embeddings import HuggingFaceEmbeddings
 
+# Optional embedding providers (install as needed)
+try:
+    from langchain_openai import OpenAIEmbeddings
+    OPENAI_AVAILABLE = True
+except ImportError:
+    OPENAI_AVAILABLE = False
+
+try:
+    from langchain_cohere import CohereEmbeddings
+    COHERE_AVAILABLE = True
+except ImportError:
+    COHERE_AVAILABLE = False
+
+
 # --- LLM and RAG Chain ---
 from langchain_groq import ChatGroq
+
+# Cerebras LLM (uses OpenAI-compatible API)
+try:
+    from langchain_openai import ChatOpenAI
+    CEREBRAS_AVAILABLE = True
+except ImportError:
+    CEREBRAS_AVAILABLE = False
 from langchain.chains.combine_documents import create_stuff_documents_chain
 from langchain.chains import create_retrieval_chain
 from langchain.prompts import ChatPromptTemplate
@@ -22,34 +43,51 @@ load_dotenv()
 class RAGProcessor:
     """
     A class to handle the entire RAG pipeline from PDF processing to answering queries.
-    This version is locked to use the 'openai/gpt-oss-20b' model.
+    Supports both Groq and Cerebras LLM providers.
     """
-    def __init__(self, groq_api_key: str, temperature: float = 0.1):
+    def __init__(self, llm_provider: str, llm_model: str, groq_api_key: str = None,
+                 cerebras_api_key: str = None, temperature: float = 0.1):
         """
-        Initializes the RAG processor. The model is hardcoded.
-        
+        Initializes the RAG processor with flexible LLM provider support.
+
         Args:
-            groq_api_key (str): The Groq API key.
+            llm_provider (str): The LLM provider ('groq' or 'cerebras').
+            llm_model (str): The model name for the chosen provider.
+            groq_api_key (str): The Groq API key (required if provider is 'groq').
+            cerebras_api_key (str): The Cerebras API key (required if provider is 'cerebras').
             temperature (float): The temperature for the LLM's generation.
         """
-        if not groq_api_key:
-            raise ValueError("Groq API key is required.")
+        self.llm_provider = llm_provider
+        self.llm_model = llm_model
         
         self.vector_store = None
         self.retrieval_chain = None
         
-        # 1. Initialize the LLM with the fixed model name
-        self.llm = ChatGroq(
-            temperature=temperature,
-            model_name="openai/gpt-oss-20b", # <-- MODEL IS HARCODED HERE
-            api_key=groq_api_key
-        )
+        # 1. Initialize the LLM based on provider
+        if llm_provider == "groq":
+            if not groq_api_key:
+                raise ValueError("Groq API key is required when using Groq provider.")
+            self.llm = ChatGroq(
+                temperature=temperature,
+                model_name=llm_model,
+                api_key=groq_api_key
+            )
+        elif llm_provider == "cerebras":
+            if not CEREBRAS_AVAILABLE:
+                raise ImportError("Cerebras LLM not available. Install with: pip install langchain-openai")
+            if not cerebras_api_key:
+                raise ValueError("Cerebras API key is required when using Cerebras provider.")
+            self.llm = ChatOpenAI(
+                temperature=temperature,
+                model=llm_model,
+                api_key=cerebras_api_key,
+                base_url="https://api.cerebras.ai/v1"
+            )
+        else:
+            raise ValueError(f"Unsupported LLM provider: {llm_provider}. Supported providers: groq, cerebras")
         
-        # 2. Initialize the Embedding Model
-        self.embedding_model = HuggingFaceEmbeddings(
-            model_name="all-MiniLM-L6-v2",
-            model_kwargs={'device': 'cpu'}
-        )
+        # 2. Initialize the Embedding Model based on environment variables
+        self.embedding_model = self._create_embedding_model()
         
         # 3. Define the RAG Prompt Template
         system_prompt = (
@@ -65,7 +103,7 @@ class RAGProcessor:
                 ("human", "{input}"),
             ]
         )
-        print("RAG Processor initialized with fixed model 'openai/gpt-oss-20b'.")
+        print(f"RAG Processor initialized with LLM: '{llm_provider}/{llm_model}' and embeddings: {self._get_embedding_info()}")
 
     def setup_rag_pipeline(self, pdf_path: str, chunk_size: int, chunk_overlap: int, top_k: int):
         """
@@ -125,3 +163,65 @@ class RAGProcessor:
         print(f"Invoking chain with query: '{query}'")
         response = self.retrieval_chain.invoke({"input": query})
         return response
+
+    def _create_embedding_model(self):
+        """
+        Creates an embedding model based on environment variables.
+
+        Environment Variables:
+        - EMBEDDING_PROVIDER: huggingface, openai, cohere (default: huggingface)
+        - EMBEDDING_MODEL: model name (default: all-MiniLM-L6-v2)
+        - EMBEDDING_DEVICE: cpu, cuda (default: cpu)
+        - OPENAI_API_KEY: required for OpenAI embeddings
+        - COHERE_API_KEY: required for Cohere embeddings
+        """
+        provider = os.getenv("EMBEDDING_PROVIDER", "huggingface").lower()
+        model_name = os.getenv("EMBEDDING_MODEL", "all-MiniLM-L6-v2")
+        device = os.getenv("EMBEDDING_DEVICE", "cpu")
+
+        print(f"Creating embedding model: Provider={provider}, Model={model_name}, Device={device}")
+
+        if provider == "huggingface":
+            return HuggingFaceEmbeddings(
+                model_name=model_name,
+                model_kwargs={'device': device},
+                encode_kwargs={'normalize_embeddings': True}
+            )
+
+        elif provider == "openai":
+            if not OPENAI_AVAILABLE:
+                raise ImportError("OpenAI embeddings not available. Install with: pip install langchain-openai")
+
+            api_key = os.getenv("OPENAI_API_KEY")
+            if not api_key:
+                raise ValueError("OPENAI_API_KEY environment variable is required for OpenAI embeddings")
+
+            return OpenAIEmbeddings(
+                model=model_name,
+                api_key=api_key
+            )
+
+        elif provider == "cohere":
+            if not COHERE_AVAILABLE:
+                raise ImportError("Cohere embeddings not available. Install with: pip install langchain-cohere")
+
+            api_key = os.getenv("COHERE_API_KEY")
+            if not api_key:
+                raise ValueError("COHERE_API_KEY environment variable is required for Cohere embeddings")
+
+            return CohereEmbeddings(
+                model=model_name,
+                cohere_api_key=api_key
+            )
+
+        else:
+            raise ValueError(f"Unsupported embedding provider: {provider}. "
+                           f"Supported providers: huggingface, openai, cohere")
+
+    def _get_embedding_info(self):
+        """
+        Returns a string describing the current embedding configuration.
+        """
+        provider = os.getenv("EMBEDDING_PROVIDER", "huggingface")
+        model_name = os.getenv("EMBEDDING_MODEL", "all-MiniLM-L6-v2")
+        return f"{provider}/{model_name}"

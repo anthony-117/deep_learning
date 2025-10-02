@@ -30,8 +30,113 @@ with st.sidebar:
     with st.expander("Settings", expanded=True):
         # LLM Configuration
         st.subheader("LLM Settings")
-        model_name = "openai/gpt-oss-20b" , 
+
+        # LLM Provider Selection
+        llm_provider = st.selectbox(
+            "LLM Provider",
+            options=["groq", "cerebras"],
+            index=0,
+            help="Choose your LLM provider. Make sure you have the required API keys set in your .env file."
+        )
+
+        # Model selection based on LLM provider
+        llm_models = {
+            "groq": [
+                "openai/gpt-oss-20b",
+                "llama-3.1-70b-versatile",
+                "llama-3.1-8b-instant",
+                "mixtral-8x7b-32768"
+            ],
+            "cerebras": [
+                "gpt-oss-120b",
+                "llama3.1-8b",
+                "llama3.1-70b",
+                "llama-3.3-70b"
+                "llama-4-maverick-17b-128e-instruct",
+                "llama-4-scout-17b-16e-instruct",
+                "qwen-3-32b",
+                "qwen-3-235b-a22b-instruct-2507",
+                "qwen-3-235b-a22b-thinking-2507",
+            ]
+        }
+
+        llm_model = st.selectbox(
+            "LLM Model",
+            options=llm_models[llm_provider],
+            index=0,
+            help=f"Select the model for {llm_provider}"
+        )
+
         temperature = st.slider("Temperature", min_value=0.0, max_value=1.0, value=0.1, step=0.05)
+
+        # API Key validation for LLM
+        if llm_provider == "groq":
+            groq_key = os.getenv("GROQ_API_KEY")
+            if not groq_key:
+                st.warning("⚠️ GROQ_API_KEY not found in environment variables")
+        elif llm_provider == "cerebras":
+            cerebras_key = os.getenv("CEREBRAS_API_KEY")
+            if not cerebras_key:
+                st.warning("⚠️ CEREBRAS_API_KEY not found in environment variables")
+
+        # Embedding Configuration
+        st.subheader("Embedding Settings")
+
+        # Embedding Provider Selection
+        embedding_provider = st.selectbox(
+            "Embedding Provider",
+            options=["huggingface", "openai", "cohere"],
+            index=0,
+            help="Choose your embedding provider. Make sure you have the required API keys set in your .env file."
+        )
+
+        # Model selection based on provider
+        embedding_models = {
+            "huggingface": [
+                "all-MiniLM-L6-v2",
+                "all-mpnet-base-v2",
+                "all-MiniLM-L12-v2",
+                "BAAI/bge-small-en-v1.5",
+                "BAAI/bge-base-en-v1.5",
+                "sentence-transformers/all-distilroberta-v1"
+            ],
+            "cohere": [
+                "embed-english-v3.0",
+                "embed-multilingual-v3.0",
+                "embed-english-light-v2.0",
+                "embed-english-light-v3.0"
+            ]
+        }
+
+        embedding_model = st.selectbox(
+            "Embedding Model",
+            options=embedding_models[embedding_provider],
+            index=0,
+            help=f"Select the embedding model for {embedding_provider}"
+        )
+
+        # Device selection (only for HuggingFace)
+        if embedding_provider == "huggingface":
+            embedding_device = st.selectbox(
+                "Device",
+                options=["cpu", "cuda"],
+                index=0,
+                help="Choose CPU or CUDA for HuggingFace models"
+            )
+        else:
+            embedding_device = "cpu"  # Not applicable for API-based providers
+
+        # API Key validation
+        if embedding_provider == "openai":
+            openai_key = os.getenv("OPENAI_API_KEY")
+            if not openai_key:
+                st.warning("⚠️ OPENAI_API_KEY not found in environment variables")
+        elif embedding_provider == "cohere":
+            cohere_key = os.getenv("COHERE_API_KEY")
+            if not cohere_key:
+                st.warning("⚠️ COHERE_API_KEY not found in environment variables")
+        else:  # huggingface
+            st.info("ℹ️ HuggingFace embeddings run locally - no API key required")
 
         # RAG Configuration
         st.subheader("RAG Settings")
@@ -53,18 +158,27 @@ with st.sidebar:
                     f.write(uploaded_file.getbuffer())
 
                 try:
+                    # Set environment variables for embedding configuration
+                    os.environ["EMBEDDING_PROVIDER"] = embedding_provider
+                    os.environ["EMBEDDING_MODEL"] = embedding_model
+                    os.environ["EMBEDDING_DEVICE"] = embedding_device
+
                     # Store current configuration
                     current_config = {
-                        "model": "openai/gpt-oss-20b", "temp": temperature, "chunk_size": chunk_size,
-                        "overlap": chunk_overlap, "top_k": top_k
+                        "llm_provider": llm_provider, "model": llm_model, "temp": temperature,
+                        "chunk_size": chunk_size, "overlap": chunk_overlap, "top_k": top_k,
+                        "embedding_provider": embedding_provider, "embedding_model": embedding_model,
+                        "embedding_device": embedding_device
                     }
                     st.session_state.config = current_config
 
                     # Initialize and setup the RAG pipeline with parameters from the UI
                     processor = RAGProcessor(
-                         groq_api_key=groq_api_key,
+                        llm_provider=llm_provider,
+                        llm_model=llm_model,
+                        groq_api_key=groq_api_key if llm_provider == "groq" else None,
+                        cerebras_api_key=os.getenv("CEREBRAS_API_KEY") if llm_provider == "cerebras" else None,
                         temperature=temperature
-
                     )
                     processor.setup_rag_pipeline(
                         pdf_path=uploaded_file.name,
@@ -96,7 +210,8 @@ if not st.session_state.rag_processor:
 else:
     # Display the configuration that was used for the current chat session
     config = st.session_state.config
-    st.info(f"**Current Configuration:** Model: `{config['model']}`, Temp: `{config['temp']}`, "
+    st.info(f"**Current Configuration:** LLM: `{config.get('llm_provider', 'N/A')}/{config['model']}`, Temp: `{config['temp']}`, "
+            f"Embedding: `{config.get('embedding_provider', 'N/A')}/{config.get('embedding_model', 'N/A')}`, "
             f"Chunk Size: `{config['chunk_size']}`, Overlap: `{config['overlap']}`, Top K: `{config['top_k']}`")
 
 # Display existing chat messages
