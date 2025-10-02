@@ -103,8 +103,24 @@ else:
 for message in st.session_state.messages:
     with st.chat_message(message["role"]):
         st.markdown(message["content"])
-        if "context" in message:
-             with st.expander("Show Retrieved Context"):
+        if "ordered_context" in message and message["ordered_context"]:
+            with st.expander("Show Retrieved Context (Ordered by Relevance)"):
+                for chunk in message["ordered_context"]:
+                    st.markdown(f"**Rank {chunk['rank']} - Relevance: {chunk['relevance_percentage']}%**")
+                    st.markdown(f"*Similarity Score: {chunk['similarity_score']:.4f}*")
+                    with st.container():
+                        st.text_area(
+                            f"Chunk {chunk['rank']} Content",
+                            value=chunk['content'],
+                            height=100,
+                            disabled=True,
+                            key=f"hist_chunk_{chunk['rank']}_{hash(chunk['content'][:50])}"
+                        )
+                    if chunk['metadata']:
+                        st.caption(f"Source: {chunk['metadata']}")
+                    st.divider()
+        elif "context" in message:
+            with st.expander("Show Retrieved Context"):
                 st.json(message["context"])
 
 # Chat input for the user
@@ -118,15 +134,31 @@ if prompt := st.chat_input("Ask a question about your document...", disabled=not
         with st.spinner("Thinking..."):
             response = st.session_state.rag_processor.ask_question(prompt)
             answer = response.get('answer', "Sorry, I couldn't find an answer.")
-            context = response.get('context', {})
-            
+            ordered_context = response.get('ordered_context', [])
+
             st.markdown(answer)
 
-            with st.expander("Show Retrieved Context"):
-                st.json(context)
+            with st.expander("Show Retrieved Context (Ordered by Relevance)"):
+                if ordered_context:
+                    for chunk in ordered_context:
+                        st.markdown(f"**Rank {chunk['rank']} - Relevance: {chunk['relevance_percentage']}%**")
+                        st.markdown(f"*Similarity Score: {chunk['similarity_score']:.4f}*")
+                        with st.container():
+                            st.text_area(
+                                f"Chunk {chunk['rank']} Content",
+                                value=chunk['content'],
+                                height=100,
+                                disabled=True,
+                                key=f"chunk_{chunk['rank']}_{hash(chunk['content'][:50])}"
+                            )
+                        if chunk['metadata']:
+                            st.caption(f"Source: {chunk['metadata']}")
+                        st.divider()
+                else:
+                    st.write("No context retrieved.")
 
             st.session_state.messages.append({
-                "role": "assistant", 
-                "content": answer, 
-                "context": context
+                "role": "assistant",
+                "content": answer,
+                "ordered_context": ordered_context
             })

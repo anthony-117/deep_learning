@@ -37,6 +37,7 @@ class RAGProcessor:
         
         self.vector_store = None
         self.retrieval_chain = None
+        self.top_k = 4  # Default value
         
         # 1. Initialize the LLM with the fixed model name
         self.llm = ChatGroq(
@@ -107,21 +108,42 @@ class RAGProcessor:
         question_answer_chain = create_stuff_documents_chain(self.llm, self.prompt)
         
         # 5. Create the retrieval chain with a configurable retriever
+        self.top_k = top_k  # Store the top_k value
         retriever = self.vector_store.as_retriever(search_kwargs={'k': top_k})
-        
+
         self.retrieval_chain = create_retrieval_chain(
-            retriever, 
+            retriever,
             question_answer_chain
         )
         print(f"RAG pipeline is ready. Retriever will use top_k={top_k}.")
 
     def ask_question(self, query: str) -> dict:
         """
-        Asks a question to the RAG pipeline and returns the response.
+        Asks a question to the RAG pipeline and returns the response with ordered context.
         """
         if not self.retrieval_chain:
             raise RuntimeError("RAG pipeline has not been set up. Call setup_rag_pipeline() first.")
-        
+
         print(f"Invoking chain with query: '{query}'")
+
+        # Get documents with similarity scores
+        docs_with_scores = self.vector_store.similarity_search_with_score(query, k=self.top_k)
+
+        # Create ordered context with relevance scores
+        ordered_context = []
+        for i, (doc, score) in enumerate(docs_with_scores):
+            ordered_context.append({
+                "rank": i + 1,
+                "content": doc.page_content,
+                "metadata": doc.metadata,
+                "similarity_score": float(score),
+                "relevance_percentage": round((1 - score) * 100, 2)  # Convert distance to relevance %
+            })
+
+        # Get the standard response from the chain
         response = self.retrieval_chain.invoke({"input": query})
+
+        # Replace the context with our ordered version
+        response["ordered_context"] = ordered_context
+
         return response
