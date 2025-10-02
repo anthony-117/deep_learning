@@ -1,0 +1,43 @@
+flowchart TD
+      A[User Opens Streamlit App] --> B[Load Environment Variables]
+      B --> C{GROQ_API_KEY Set?}
+      C -->|No| D[Show Warning Message]
+      C -->|Yes| E[Initialize Session State]
+
+      E --> F[Display Sidebar Configuration]
+      F --> G[User Uploads PDF]
+      G --> H[User Configures RAG Settings]
+      H --> I{Chunk Overlap < Chunk Size?}
+      I -->|No| J[Show Error Message]
+      I -->|Yes| K[User Clicks Process PDF]
+
+      K --> L[Save PDF Temporarily]
+      L --> M[Initialize RAGProcessor]
+      M --> N[Setup RAG Pipeline]
+
+      N --> O[Load PDF with PyPDFLoader]
+      O --> P[Split into Chunks with RecursiveCharacterTextSplitter]
+      P --> Q[Create Vector Store with FAISS]
+      Q --> R[Initialize HuggingFace Embeddings]
+      R --> S[Create Retrieval Chain with ChatGroq LLM]
+      S --> T[Clean up Temporary File]
+
+      T --> U[Display Success Message]
+      U --> V[Reset Chat History]
+      V --> W[Show Chat Interface]
+
+      W --> X[User Enters Question]
+      X --> Y[Query RAG Pipeline]
+      Y --> Z[Retrieve Relevant Chunks]
+      Z --> AA[Generate Response with LLM]
+      AA --> BB[Display Answer & Context]
+      BB --> CC[Update Chat History]
+      CC --> X
+
+      style A fill:#e1f5fe
+      style M fill:#fff3e0
+      style N fill:#fff3e0
+      style Y fill:#f3e5f5
+      style AA fill:#f3e5f5
+      style D fill:#ffebee
+      style J fill:#ffebee

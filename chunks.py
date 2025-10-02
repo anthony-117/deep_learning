@@ -1,10 +1,16 @@
 # rag_processor.py
 import os
+import pandas as pd
+import numpy as np
+from io import BytesIO
+from typing import List, Dict, Any, Optional, Tuple
 from dotenv import load_dotenv
 
-# --- PDF Processing ---
+# --- Enhanced PDF Processing ---
+import fitz  # PyMuPDF for advanced PDF parsing
 from langchain_community.document_loaders import PyPDFLoader
 from langchain.text_splitter import RecursiveCharacterTextSplitter
+from langchain.schema import Document
 
 # --- Vector Store and Embeddings ---
 from langchain_community.vectorstores import FAISS
@@ -15,6 +21,29 @@ from langchain_groq import ChatGroq
 from langchain.chains.combine_documents import create_stuff_documents_chain
 from langchain.chains import create_retrieval_chain
 from langchain.prompts import ChatPromptTemplate
+
+# --- Optional advanced libraries for table extraction ---
+try:
+    import camelot
+    CAMELOT_AVAILABLE = True
+except ImportError:
+    CAMELOT_AVAILABLE = False
+    print("Camelot not available. Install with: pip install camelot-py[cv]")
+
+try:
+    import tabula
+    TABULA_AVAILABLE = True
+except ImportError:
+    TABULA_AVAILABLE = False
+    print("Tabula not available. Install with: pip install tabula-py")
+
+try:
+    from PIL import Image
+    import cv2
+    VISION_AVAILABLE = True
+except ImportError:
+    VISION_AVAILABLE = False
+    print("Vision libraries not available. Install with: pip install pillow opencv-python")
 
 # Load environment variables from .env file
 load_dotenv()
@@ -51,12 +80,15 @@ class RAGProcessor:
             model_kwargs={'device': 'cpu'}
         )
         
-        # 3. Define the RAG Prompt Template
+        # 3. Define the enhanced RAG Prompt Template for multimodal content
         system_prompt = (
             "You are an assistant for question-answering tasks. "
             "Use the following retrieved context to answer the question. "
+            "The context may include text, tables, and descriptions of images/diagrams. "
+            "When referencing tables, preserve their structure in your response. "
+            "When discussing images or diagrams, mention the visual elements described. "
             "If you don't know the answer, just say that you don't know. "
-            "Use three sentences maximum and keep the answer concise.\n\n"
+            "Keep the answer comprehensive but concise.\n\n"
             "{context}"
         )
         self.prompt = ChatPromptTemplate.from_messages(
@@ -65,7 +97,262 @@ class RAGProcessor:
                 ("human", "{input}"),
             ]
         )
-        print("RAG Processor initialized with fixed model 'openai/gpt-oss-20b'.")
+        print("RAG Processor initialized with enhanced multimodal capabilities.")
+
+    def extract_tables_from_page(self, pdf_path: str, page_num: int) -> List[Dict[str, Any]]:
+        """Extract tables from a specific PDF page using multiple methods."""
+        tables = []
+
+        # Method 1: Camelot (if available)
+        if CAMELOT_AVAILABLE:
+            try:
+                camelot_tables = camelot.read_pdf(pdf_path, pages=str(page_num + 1))
+                for i, table in enumerate(camelot_tables):
+                    if table.df.shape[0] > 1 and table.df.shape[1] > 1:
+                        tables.append({
+                            'method': 'camelot',
+                            'page': page_num,
+                            'table_id': f"camelot_{page_num}_{i}",
+                            'dataframe': table.df,
+                            'confidence': getattr(table, 'accuracy', 0.0)
+                        })
+            except Exception as e:
+                print(f"Camelot extraction failed for page {page_num}: {e}")
+
+        # Method 2: Tabula (if available)
+        if TABULA_AVAILABLE:
+            try:
+                tabula_tables = tabula.read_pdf(pdf_path, pages=page_num + 1, multiple_tables=True)
+                for i, df in enumerate(tabula_tables):
+                    if df.shape[0] > 1 and df.shape[1] > 1:
+                        tables.append({
+                            'method': 'tabula',
+                            'page': page_num,
+                            'table_id': f"tabula_{page_num}_{i}",
+                            'dataframe': df,
+                            'confidence': 0.8
+                        })
+            except Exception as e:
+                print(f"Tabula extraction failed for page {page_num}: {e}")
+
+        return tables
+
+    def extract_images_from_page(self, page, page_num: int) -> List[Dict[str, Any]]:
+        """Extract and analyze images from a PDF page."""
+        images = []
+
+        if not VISION_AVAILABLE:
+            return images
+
+        try:
+            image_list = page.get_images()
+
+            for img_index, img in enumerate(image_list):
+                try:
+                    xref = img[0]
+                    pix = fitz.Pixmap(page.parent, xref)
+
+                    if pix.n - pix.alpha < 4:  # GRAY or RGB
+                        width, height = pix.width, pix.height
+
+                        # Basic image analysis
+                        size_category = self.categorize_image_size(width, height)
+                        description = f"Image on page {page_num + 1}: {size_category}, dimensions {width}x{height}px"
+
+                        images.append({
+                            'page': page_num,
+                            'image_id': f"img_{page_num}_{img_index}",
+                            'width': width,
+                            'height': height,
+                            'description': description,
+                            'size_category': size_category
+                        })
+
+                    pix = None
+
+                except Exception as e:
+                    print(f"Error processing image {img_index} on page {page_num}: {e}")
+
+        except Exception as e:
+            print(f"Error extracting images from page {page_num}: {e}")
+
+        return images
+
+    def categorize_image_size(self, width: int, height: int) -> str:
+        """Categorize image by size to understand its likely importance."""
+        area = width * height
+
+        if area < 10000:
+            return "small icon/symbol"
+        elif area < 100000:
+            return "medium figure/diagram"
+        else:
+            return "large chart/diagram"
+
+    def format_table_as_text(self, df: pd.DataFrame) -> str:
+        """Convert DataFrame to readable text format."""
+        try:
+            df_clean = df.fillna('')
+            table_text = df_clean.to_string(index=False, max_rows=50)
+
+            if len(df) > 50:
+                table_text += f"\n... (Table continues with {len(df)} total rows)"
+
+            return table_text
+
+        except Exception as e:
+            print(f"Error formatting table: {e}")
+            return str(df)
+
+    def process_pdf_with_advanced_extraction(self, pdf_path: str) -> List[Document]:
+        """Process PDF with enhanced extraction of tables and images."""
+        documents = []
+
+        try:
+            doc = fitz.open(pdf_path)
+
+            for page_num in range(len(doc)):
+                page = doc[page_num]
+
+                # Extract text
+                text = page.get_text()
+
+                # Extract tables
+                tables = self.extract_tables_from_page(pdf_path, page_num)
+
+                # Extract images
+                images = self.extract_images_from_page(page, page_num)
+
+                # Create main text document
+                if text.strip():
+                    text_doc = Document(
+                        page_content=text,
+                        metadata={
+                            'source': pdf_path,
+                            'page': page_num,
+                            'content_type': 'text',
+                            'source_file': os.path.basename(pdf_path)
+                        }
+                    )
+                    documents.append(text_doc)
+
+                # Create table documents
+                for table in tables:
+                    table_text = self.format_table_as_text(table['dataframe'])
+                    if table_text.strip():
+                        table_doc = Document(
+                            page_content=f"TABLE on page {page_num + 1}:\n{table_text}",
+                            metadata={
+                                'source': pdf_path,
+                                'page': page_num,
+                                'content_type': 'table',
+                                'table_id': table['table_id'],
+                                'extraction_method': table['method'],
+                                'confidence': table.get('confidence', 0.0),
+                                'source_file': os.path.basename(pdf_path)
+                            }
+                        )
+                        documents.append(table_doc)
+
+                # Create image documents
+                for image in images:
+                    image_doc = Document(
+                        page_content=f"IMAGE on page {page_num + 1}: {image['description']}",
+                        metadata={
+                            'source': pdf_path,
+                            'page': page_num,
+                            'content_type': 'image',
+                            'image_id': image['image_id'],
+                            'size_category': image['size_category'],
+                            'dimensions': f"{image['width']}x{image['height']}",
+                            'source_file': os.path.basename(pdf_path)
+                        }
+                    )
+                    documents.append(image_doc)
+
+            doc.close()
+
+        except Exception as e:
+            print(f"Advanced extraction failed for {pdf_path}, using fallback: {e}")
+            # Fallback to basic extraction
+            loader = PyPDFLoader(pdf_path)
+            fallback_docs = loader.load()
+            for doc in fallback_docs:
+                doc.metadata['source_file'] = os.path.basename(pdf_path)
+                doc.metadata['content_type'] = 'text_fallback'
+            documents.extend(fallback_docs)
+
+        return documents
+
+    def smart_chunk_documents(self, documents: List[Document], chunk_size: int, chunk_overlap: int) -> List[Document]:
+        """Smart chunking that respects content types and structure."""
+        chunks = []
+
+        # Separate documents by type
+        text_docs = [doc for doc in documents if doc.metadata.get('content_type') in ['text', 'text_fallback']]
+        table_docs = [doc for doc in documents if doc.metadata.get('content_type') == 'table']
+        image_docs = [doc for doc in documents if doc.metadata.get('content_type') == 'image']
+
+        # Process text documents with standard chunking
+        if text_docs:
+            text_splitter = RecursiveCharacterTextSplitter(
+                chunk_size=chunk_size,
+                chunk_overlap=chunk_overlap,
+                length_function=len
+            )
+            text_chunks = text_splitter.split_documents(text_docs)
+            chunks.extend(text_chunks)
+
+        # Keep tables as single chunks (don't split them)
+        for table_doc in table_docs:
+            if len(table_doc.page_content) > chunk_size * 2:
+                # If table is very large, create a summary chunk
+                lines = table_doc.page_content.split('\n')
+                summary = '\n'.join(lines[:20]) + f"\n... (Large table with {len(lines)} total lines)"
+                table_doc.page_content = summary
+            chunks.append(table_doc)
+
+        # Keep image descriptions as single chunks
+        chunks.extend(image_docs)
+
+        return chunks
+
+    def setup_rag_pipeline_enhanced(self, pdf_paths: List[str], chunk_size: int, chunk_overlap: int, top_k: int):
+        """Set up RAG pipeline with enhanced PDF processing for tables and images."""
+        if not pdf_paths:
+            raise ValueError("No PDF paths provided")
+
+        for pdf_path in pdf_paths:
+            if not os.path.exists(pdf_path):
+                raise FileNotFoundError(f"PDF file not found at {pdf_path}")
+
+        print(f"Processing {len(pdf_paths)} PDF files with enhanced extraction...")
+        all_documents = []
+
+        for pdf_path in pdf_paths:
+            print(f"Processing with advanced extraction: {os.path.basename(pdf_path)}")
+            documents = self.process_pdf_with_advanced_extraction(pdf_path)
+            all_documents.extend(documents)
+
+        print(f"Total documents extracted: {len(all_documents)}")
+
+        # Smart chunking
+        all_chunks = self.smart_chunk_documents(all_documents, chunk_size, chunk_overlap)
+        print(f"Created {len(all_chunks)} chunks with smart chunking")
+
+        # Create vector store
+        self.vector_store = FAISS.from_documents(
+            documents=all_chunks,
+            embedding=self.embedding_model
+        )
+
+        # Create retrieval chain
+        question_answer_chain = create_stuff_documents_chain(self.llm, self.prompt)
+        retriever = self.vector_store.as_retriever(search_kwargs={'k': top_k})
+
+        self.retrieval_chain = create_retrieval_chain(retriever, question_answer_chain)
+
+        print(f"Enhanced RAG pipeline ready with {len(pdf_paths)} files and {len(all_chunks)} chunks.")
 
     def setup_rag_pipeline(self, pdf_path: str, chunk_size: int, chunk_overlap: int, top_k: int):
         """
@@ -114,6 +401,72 @@ class RAGProcessor:
             question_answer_chain
         )
         print(f"RAG pipeline is ready. Retriever will use top_k={top_k}.")
+
+    def setup_rag_pipeline_multiple(self, pdf_paths: list, chunk_size: int, chunk_overlap: int, top_k: int):
+        """
+        Processes multiple PDF files to build the RAG pipeline using custom settings.
+
+        Args:
+            pdf_paths (list): List of file paths to PDF files.
+            chunk_size (int): The size of each text chunk.
+            chunk_overlap (int): The overlap between adjacent chunks.
+            top_k (int): The number of relevant chunks to retrieve.
+        """
+        if not pdf_paths:
+            raise ValueError("No PDF paths provided")
+
+        for pdf_path in pdf_paths:
+            if not os.path.exists(pdf_path):
+                raise FileNotFoundError(f"PDF file not found at {pdf_path}")
+
+        print(f"Processing {len(pdf_paths)} PDF files...")
+
+        all_chunks = []
+
+        # Process each PDF file
+        for i, pdf_path in enumerate(pdf_paths):
+            print(f"Processing file {i+1}/{len(pdf_paths)}: {pdf_path}")
+
+            # 1. Load the PDF
+            loader = PyPDFLoader(pdf_path)
+            documents = loader.load()
+
+            # Add source information to each document
+            for doc in documents:
+                doc.metadata['source_file'] = os.path.basename(pdf_path)
+
+            # 2. Split the document into chunks with configurable overlap
+            text_splitter = RecursiveCharacterTextSplitter(
+                chunk_size=chunk_size,
+                chunk_overlap=chunk_overlap,
+                length_function=len
+            )
+            chunks = text_splitter.split_documents(documents)
+            all_chunks.extend(chunks)
+
+            print(f"File {os.path.basename(pdf_path)} split into {len(chunks)} chunks.")
+
+        print(f"Total chunks from all files: {len(all_chunks)}")
+
+        # 3. Create a vector store from all chunks
+        print("Creating vector store from all documents...")
+        self.vector_store = FAISS.from_documents(
+            documents=all_chunks,
+            embedding=self.embedding_model
+        )
+        print("Vector store created successfully.")
+
+        # 4. Create the core RAG chain
+        question_answer_chain = create_stuff_documents_chain(self.llm, self.prompt)
+
+        # 5. Create the retrieval chain with a configurable retriever
+        retriever = self.vector_store.as_retriever(search_kwargs={'k': top_k})
+
+        self.retrieval_chain = create_retrieval_chain(
+            retriever,
+            question_answer_chain
+        )
+        print(f"RAG pipeline is ready with {len(pdf_paths)} files. Retriever will use top_k={top_k}.")
 
     def ask_question(self, query: str) -> dict:
         """
