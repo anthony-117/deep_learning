@@ -74,9 +74,22 @@ with st.sidebar:
 
     st.header("2. Configure RAG Pipeline")
     with st.expander("Settings", expanded=True):
+        # Processing Mode
+        st.subheader("Processing Mode")
+        use_enhanced_processing = st.checkbox(
+            "Enable Enhanced Processing",
+            value=True,
+            help="Extract tables, images, and diagrams in addition to text"
+        )
+
+        if use_enhanced_processing:
+            st.info("📊 Enhanced mode extracts tables, images, and structured content")
+        else:
+            st.info("📄 Basic mode extracts text content only")
+
         # LLM Configuration
         st.subheader("LLM Settings")
-        model_name = "openai/gpt-oss-20b" 
+        model_name = "openai/gpt-oss-20b"
         temperature = st.slider("Temperature", min_value=0.0, max_value=1.0, value=0.1, step=0.05)
 
         # RAG Configuration
@@ -84,7 +97,7 @@ with st.sidebar:
         chunk_size = st.slider("Chunk Size", min_value=256, max_value=2048, value=1000, step=128)
         chunk_overlap = st.slider("Chunk Overlap", min_value=0, max_value=512, value=200, step=32)
         top_k = st.slider("Top 'K' Chunks", min_value=1, max_value=10, value=4, step=1)
-        
+
         # Add a check to ensure overlap is less than chunk size
         if chunk_overlap >= chunk_size:
             st.warning("Chunk Overlap should be smaller than Chunk Size.")
@@ -101,7 +114,7 @@ with st.sidebar:
                     # Store current configuration
                     current_config = {
                         "model": "openai/gpt-oss-20b", "temp": temperature, "chunk_size": chunk_size,
-                        "overlap": chunk_overlap, "top_k": top_k
+                        "overlap": chunk_overlap, "top_k": top_k, "enhanced": use_enhanced_processing
                     }
                     st.session_state.config = current_config
 
@@ -111,21 +124,31 @@ with st.sidebar:
                         temperature=temperature
                     )
 
-                    # Process files based on upload mode
+                    # Process files based on upload mode and processing type
                     if upload_mode == "Folder Path":
                         # Process all PDFs in the folder
                         pdf_files = [f for f in os.listdir(folder_path) if f.lower().endswith('.pdf')]
                         file_paths = [os.path.join(folder_path, f) for f in pdf_files]
 
-                        processor.setup_rag_pipeline_multiple(
-                            pdf_paths=file_paths,
-                            chunk_size=chunk_size,
-                            chunk_overlap=chunk_overlap,
-                            top_k=top_k
-                        )
+                        if use_enhanced_processing:
+                            processor.setup_rag_pipeline_enhanced(
+                                pdf_paths=file_paths,
+                                chunk_size=chunk_size,
+                                chunk_overlap=chunk_overlap,
+                                top_k=top_k
+                            )
+                            processing_type = "Enhanced"
+                        else:
+                            processor.setup_rag_pipeline_multiple(
+                                pdf_paths=file_paths,
+                                chunk_size=chunk_size,
+                                chunk_overlap=chunk_overlap,
+                                top_k=top_k
+                            )
+                            processing_type = "Basic"
 
                         file_count = len(pdf_files)
-                        success_message = f"Processed {file_count} PDF files from folder!"
+                        success_message = f"{processing_type} processing completed: {file_count} PDF files from folder!"
 
                     else:
                         # Process uploaded files (single or multiple)
@@ -137,25 +160,36 @@ with st.sidebar:
                                 f.write(uploaded_file.getbuffer())
                             temp_paths.append(temp_path)
 
-                        if len(temp_paths) == 1:
-                            # Single file - use existing method
+                        if use_enhanced_processing and len(temp_paths) >= 1:
+                            # Use enhanced processing for single or multiple files
+                            processor.setup_rag_pipeline_enhanced(
+                                pdf_paths=temp_paths,
+                                chunk_size=chunk_size,
+                                chunk_overlap=chunk_overlap,
+                                top_k=top_k
+                            )
+                            processing_type = "Enhanced"
+                        elif len(temp_paths) == 1:
+                            # Single file - use basic method
                             processor.setup_rag_pipeline(
                                 pdf_path=temp_paths[0],
                                 chunk_size=chunk_size,
                                 chunk_overlap=chunk_overlap,
                                 top_k=top_k
                             )
+                            processing_type = "Basic"
                         else:
-                            # Multiple files - use new method
+                            # Multiple files - use basic multiple method
                             processor.setup_rag_pipeline_multiple(
                                 pdf_paths=temp_paths,
                                 chunk_size=chunk_size,
                                 chunk_overlap=chunk_overlap,
                                 top_k=top_k
                             )
+                            processing_type = "Basic"
 
                         file_count = len(uploaded_files)
-                        success_message = f"Processed {file_count} PDF file{'s' if file_count > 1 else ''}!"
+                        success_message = f"{processing_type} processing completed: {file_count} PDF file{'s' if file_count > 1 else ''}!"
 
                         # Clean up temporary files
                         for temp_path in temp_paths:
@@ -186,7 +220,8 @@ if not st.session_state.rag_processor:
 else:
     # Display the configuration that was used for the current chat session
     config = st.session_state.config
-    st.info(f"**Current Configuration:** Model: `{config['model']}`, Temp: `{config['temp']}`, "
+    processing_mode = "Enhanced" if config.get('enhanced', False) else "Basic"
+    st.info(f"**Current Configuration:** Mode: `{processing_mode}`, Model: `{config['model']}`, Temp: `{config['temp']}`, "
             f"Chunk Size: `{config['chunk_size']}`, Overlap: `{config['overlap']}`, Top K: `{config['top_k']}`")
 
 # Display existing chat messages
