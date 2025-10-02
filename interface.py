@@ -25,52 +25,34 @@ if "config" not in st.session_state:
 with st.sidebar:
     st.header("1. Upload your Documents")
 
-    # Upload mode selection
-    upload_mode = st.radio(
-        "Choose upload mode:",
-        ["Single PDF File", "Multiple PDF Files", "Folder Path"],
-        help="Select how you want to provide documents for processing"
-    )
+    # Initialize session state for upload modal
+    if 'show_upload_modal' not in st.session_state:
+        st.session_state.show_upload_modal = False
+    if 'uploaded_files' not in st.session_state:
+        st.session_state.uploaded_files = None
+    if 'folder_path' not in st.session_state:
+        st.session_state.folder_path = None
+    if 'upload_mode' not in st.session_state:
+        st.session_state.upload_mode = None
 
-    uploaded_files = None
-    folder_path = None
+    # Upload button to open modal
+    if st.button("📎 Upload Documents", type="primary", use_container_width=True):
+        st.session_state.show_upload_modal = True
 
-    if upload_mode == "Single PDF File":
-        uploaded_file = st.file_uploader("Choose a PDF file", type="pdf")
-        if uploaded_file:
-            uploaded_files = [uploaded_file]
-    elif upload_mode == "Multiple PDF Files":
-        uploaded_files = st.file_uploader("Choose PDF files", type="pdf", accept_multiple_files=True)
-    else:  # Folder Path
-        folder_path = st.text_input(
-            "Enter folder path containing PDF files:",
-            placeholder="/path/to/your/pdf/folder",
-            help="Enter the full path to a folder containing PDF files"
-        )
-        if folder_path:
-            if os.path.exists(folder_path):
-                if os.path.isdir(folder_path):
-                    try:
-                        all_files = os.listdir(folder_path)
-                        pdf_files = [f for f in all_files if f.lower().endswith('.pdf')]
+    # Display current upload status
+    if st.session_state.uploaded_files:
+        st.success(f"✅ {len(st.session_state.uploaded_files)} file(s) selected")
+    elif st.session_state.folder_path:
+        if os.path.exists(st.session_state.folder_path):
+            pdf_count = len([f for f in os.listdir(st.session_state.folder_path) if f.lower().endswith('.pdf')])
+            st.success(f"✅ Folder selected ({pdf_count} PDF files)")
+        else:
+            st.error("❌ Selected folder no longer exists")
+    else:
+        st.info("📄 No documents selected")
 
-                        if pdf_files:
-                            st.success(f"Found {len(pdf_files)} PDF files in the folder")
-                            st.write("Files found:", pdf_files[:5])  # Show first 5 files
-                            if len(pdf_files) > 5:
-                                st.write(f"... and {len(pdf_files) - 5} more files")
-                        else:
-                            non_pdf_files = [f for f in all_files if not f.startswith('.')]
-                            if non_pdf_files:
-                                st.warning(f"No PDF files found. Found {len(non_pdf_files)} other files (only PDF files are supported)")
-                            else:
-                                st.warning("Folder is empty or contains only hidden files")
-                    except PermissionError:
-                        st.error("Permission denied: Cannot access the specified folder")
-                else:
-                    st.error("Path exists but is not a directory")
-            else:
-                st.error("Folder path does not exist")
+    uploaded_files = st.session_state.uploaded_files
+    folder_path = st.session_state.folder_path
 
     st.header("2. Configure RAG Pipeline")
     with st.expander("Settings", expanded=True):
@@ -124,8 +106,8 @@ with st.sidebar:
                         temperature=temperature
                     )
 
-                    # Process files based on upload mode and processing type
-                    if upload_mode == "Folder Path":
+                    # Process files based on upload type and processing type
+                    if folder_path:
                         # Process all PDFs in the folder
                         pdf_files = [f for f in os.listdir(folder_path) if f.lower().endswith('.pdf')]
                         file_paths = [os.path.join(folder_path, f) for f in pdf_files]
@@ -251,7 +233,131 @@ if prompt := st.chat_input("Ask a question about your document...", disabled=not
                 st.json(context)
 
             st.session_state.messages.append({
-                "role": "assistant", 
-                "content": answer, 
+                "role": "assistant",
+                "content": answer,
                 "context": context
             })
+
+# --- Upload Modal ---
+if st.session_state.show_upload_modal:
+    @st.dialog("📁 Upload Documents")
+    def upload_modal():
+        st.markdown("### Choose how you want to upload your documents:")
+
+        col1, col2 = st.columns(2)
+
+        with col1:
+            if st.button(
+                "📁\n\n**Upload Folder**\n\nSelect a folder containing PDF files",
+                use_container_width=True,
+                type="secondary",
+                key="folder_upload_btn"
+            ):
+                st.session_state.upload_mode = "folder"
+                st.rerun()
+
+        with col2:
+            if st.button(
+                "📄\n\n**Upload Files**\n\nSelect individual PDF files",
+                use_container_width=True,
+                type="secondary",
+                key="file_upload_btn"
+            ):
+                st.session_state.upload_mode = "files"
+                st.rerun()
+
+        # Handle folder upload
+        if st.session_state.upload_mode == "folder":
+            st.markdown("---")
+            st.markdown("### 📁 Folder Upload")
+
+            folder_path = st.text_input(
+                "Enter folder path containing PDF files:",
+                placeholder="/path/to/your/pdf/folder",
+                help="Enter the full path to a folder containing PDF files"
+            )
+
+            col1, col2, col3 = st.columns([1, 1, 1])
+
+            if folder_path:
+                if os.path.exists(folder_path):
+                    if os.path.isdir(folder_path):
+                        try:
+                            all_files = os.listdir(folder_path)
+                            pdf_files = [f for f in all_files if f.lower().endswith('.pdf')]
+
+                            if pdf_files:
+                                st.success(f"✅ Found {len(pdf_files)} PDF files")
+                                if len(pdf_files) <= 10:
+                                    st.write("Files:", pdf_files)
+                                else:
+                                    st.write(f"Files: {pdf_files[:5]} ... and {len(pdf_files) - 5} more")
+
+                                with col2:
+                                    if st.button("✅ Select Folder", type="primary", use_container_width=True):
+                                        st.session_state.folder_path = folder_path
+                                        st.session_state.uploaded_files = None
+                                        st.session_state.show_upload_modal = False
+                                        st.session_state.upload_mode = None
+                                        st.success("Folder selected!")
+                                        st.rerun()
+                            else:
+                                non_pdf_files = [f for f in all_files if not f.startswith('.')]
+                                if non_pdf_files:
+                                    st.warning(f"❌ No PDF files found. Found {len(non_pdf_files)} other files")
+                                else:
+                                    st.warning("❌ Folder is empty or contains only hidden files")
+                        except PermissionError:
+                            st.error("❌ Permission denied: Cannot access the specified folder")
+                    else:
+                        st.error("❌ Path exists but is not a directory")
+                else:
+                    st.error("❌ Folder path does not exist")
+
+            with col3:
+                if st.button("❌ Cancel", use_container_width=True):
+                    st.session_state.show_upload_modal = False
+                    st.session_state.upload_mode = None
+                    st.rerun()
+
+        # Handle file upload
+        elif st.session_state.upload_mode == "files":
+            st.markdown("---")
+            st.markdown("### 📄 File Upload")
+
+            uploaded_files = st.file_uploader(
+                "Choose PDF files:",
+                type="pdf",
+                accept_multiple_files=True,
+                help="You can select multiple PDF files"
+            )
+
+            col1, col2, col3 = st.columns([1, 1, 1])
+
+            if uploaded_files:
+                st.success(f"✅ {len(uploaded_files)} file(s) selected")
+                for file in uploaded_files:
+                    st.write(f"📄 {file.name}")
+
+                with col2:
+                    if st.button("✅ Upload Files", type="primary", use_container_width=True):
+                        st.session_state.uploaded_files = uploaded_files
+                        st.session_state.folder_path = None
+                        st.session_state.show_upload_modal = False
+                        st.session_state.upload_mode = None
+                        st.success("Files uploaded!")
+                        st.rerun()
+
+            with col3:
+                if st.button("❌ Cancel", use_container_width=True):
+                    st.session_state.show_upload_modal = False
+                    st.session_state.upload_mode = None
+                    st.rerun()
+
+        # Close button at bottom
+        if st.session_state.upload_mode is None:
+            if st.button("❌ Close", use_container_width=True):
+                st.session_state.show_upload_modal = False
+                st.rerun()
+
+    upload_modal()
