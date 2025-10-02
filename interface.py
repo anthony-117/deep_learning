@@ -271,48 +271,29 @@ if st.session_state.show_upload_modal:
             st.markdown("---")
             st.markdown("### 📁 Folder Upload")
 
-            folder_path = st.text_input(
-                "Enter folder path containing PDF files:",
-                placeholder="/path/to/your/pdf/folder",
-                help="Enter the full path to a folder containing PDF files"
+            # Use file uploader for multiple files to simulate folder upload
+            uploaded_folder_files = st.file_uploader(
+                "Choose all PDF files from your folder:",
+                type="pdf",
+                accept_multiple_files=True,
+                help="Select all PDF files from the folder you want to process"
             )
 
             col1, col2, col3 = st.columns([1, 1, 1])
 
-            if folder_path:
-                if os.path.exists(folder_path):
-                    if os.path.isdir(folder_path):
-                        try:
-                            all_files = os.listdir(folder_path)
-                            pdf_files = [f for f in all_files if f.lower().endswith('.pdf')]
+            if uploaded_folder_files:
+                st.success(f"✅ {len(uploaded_folder_files)} file(s) selected")
+                for file in uploaded_folder_files:
+                    st.write(f"📄 {file.name}")
 
-                            if pdf_files:
-                                st.success(f"✅ Found {len(pdf_files)} PDF files")
-                                if len(pdf_files) <= 10:
-                                    st.write("Files:", pdf_files)
-                                else:
-                                    st.write(f"Files: {pdf_files[:5]} ... and {len(pdf_files) - 5} more")
-
-                                with col2:
-                                    if st.button("✅ Select Folder", type="primary", use_container_width=True):
-                                        st.session_state.folder_path = folder_path
-                                        st.session_state.uploaded_files = None
-                                        st.session_state.show_upload_modal = False
-                                        st.session_state.upload_mode = None
-                                        st.success("Folder selected!")
-                                        st.rerun()
-                            else:
-                                non_pdf_files = [f for f in all_files if not f.startswith('.')]
-                                if non_pdf_files:
-                                    st.warning(f"❌ No PDF files found. Found {len(non_pdf_files)} other files")
-                                else:
-                                    st.warning("❌ Folder is empty or contains only hidden files")
-                        except PermissionError:
-                            st.error("❌ Permission denied: Cannot access the specified folder")
-                    else:
-                        st.error("❌ Path exists but is not a directory")
-                else:
-                    st.error("❌ Folder path does not exist")
+                with col2:
+                    if st.button("✅ Select Files", type="primary", use_container_width=True):
+                        st.session_state.uploaded_files = uploaded_folder_files
+                        st.session_state.folder_path = None
+                        st.session_state.show_upload_modal = False
+                        st.session_state.upload_mode = None
+                        st.success("Files selected!")
+                        st.rerun()
 
             with col3:
                 if st.button("❌ Cancel", use_container_width=True):
