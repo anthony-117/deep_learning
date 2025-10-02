@@ -115,6 +115,72 @@ class RAGProcessor:
         )
         print(f"RAG pipeline is ready. Retriever will use top_k={top_k}.")
 
+    def setup_rag_pipeline_multiple(self, pdf_paths: list, chunk_size: int, chunk_overlap: int, top_k: int):
+        """
+        Processes multiple PDF files to build the RAG pipeline using custom settings.
+
+        Args:
+            pdf_paths (list): List of file paths to PDF files.
+            chunk_size (int): The size of each text chunk.
+            chunk_overlap (int): The overlap between adjacent chunks.
+            top_k (int): The number of relevant chunks to retrieve.
+        """
+        if not pdf_paths:
+            raise ValueError("No PDF paths provided")
+
+        for pdf_path in pdf_paths:
+            if not os.path.exists(pdf_path):
+                raise FileNotFoundError(f"PDF file not found at {pdf_path}")
+
+        print(f"Processing {len(pdf_paths)} PDF files...")
+
+        all_chunks = []
+
+        # Process each PDF file
+        for i, pdf_path in enumerate(pdf_paths):
+            print(f"Processing file {i+1}/{len(pdf_paths)}: {pdf_path}")
+
+            # 1. Load the PDF
+            loader = PyPDFLoader(pdf_path)
+            documents = loader.load()
+
+            # Add source information to each document
+            for doc in documents:
+                doc.metadata['source_file'] = os.path.basename(pdf_path)
+
+            # 2. Split the document into chunks with configurable overlap
+            text_splitter = RecursiveCharacterTextSplitter(
+                chunk_size=chunk_size,
+                chunk_overlap=chunk_overlap,
+                length_function=len
+            )
+            chunks = text_splitter.split_documents(documents)
+            all_chunks.extend(chunks)
+
+            print(f"File {os.path.basename(pdf_path)} split into {len(chunks)} chunks.")
+
+        print(f"Total chunks from all files: {len(all_chunks)}")
+
+        # 3. Create a vector store from all chunks
+        print("Creating vector store from all documents...")
+        self.vector_store = FAISS.from_documents(
+            documents=all_chunks,
+            embedding=self.embedding_model
+        )
+        print("Vector store created successfully.")
+
+        # 4. Create the core RAG chain
+        question_answer_chain = create_stuff_documents_chain(self.llm, self.prompt)
+
+        # 5. Create the retrieval chain with a configurable retriever
+        retriever = self.vector_store.as_retriever(search_kwargs={'k': top_k})
+
+        self.retrieval_chain = create_retrieval_chain(
+            retriever,
+            question_answer_chain
+        )
+        print(f"RAG pipeline is ready with {len(pdf_paths)} files. Retriever will use top_k={top_k}.")
+
     def ask_question(self, query: str) -> dict:
         """
         Asks a question to the RAG pipeline and returns the response.
