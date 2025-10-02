@@ -1,0 +1,13 @@
+langchain
+langchain-groq
+langchain-community
+pypdf
+faiss-cpu
+sentence-transformers
+python-dotenv
+reportlab
+PyMuPDF
+tabula-py
+pillow
+opencv-python
+camelot-py[cv]
