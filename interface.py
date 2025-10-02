@@ -174,6 +174,30 @@ with st.sidebar:
         else:  # huggingface
             st.info("ℹ️ HuggingFace embeddings run locally - no API key required")
 
+        # Vector Database Configuration
+        st.subheader("Vector Database")
+        vector_db_options = ['faiss', 'qdrant', 'chroma', 'weaviate', 'milvus']
+        selected_vector_db = st.selectbox(
+            "Choose Vector Database",
+            options=vector_db_options,
+            index=0,
+            help="Select the vector database for document storage and retrieval"
+        )
+
+        # Show requirements for selected vector database
+        if selected_vector_db != 'faiss':
+            db_requirements = {
+                'qdrant': "Requires: pip install qdrant-client",
+                'chroma': "Requires: pip install chromadb",
+                'pinecone': "Requires: pip install pinecone-client + API keys",
+                'weaviate': "Requires: pip install weaviate-client",
+                'milvus': "Requires: pip install pymilvus + running Milvus server"
+            }
+            st.info(f"📦 {db_requirements.get(selected_vector_db, '')}")
+
+            if selected_vector_db in ['pinecone', 'qdrant', 'weaviate']:
+                st.warning("⚠️ Make sure to configure the required environment variables in .env file")
+
         # RAG Configuration
         st.subheader("RAG Settings")
         chunk_size = st.slider("Chunk Size", min_value=256, max_value=2048, value=1000, step=128)
@@ -203,7 +227,7 @@ with st.sidebar:
                         "llm_provider": llm_provider, "model": llm_model, "temp": temperature,
                         "chunk_size": chunk_size, "overlap": chunk_overlap, "top_k": top_k,
                         "embedding_provider": embedding_provider, "embedding_model": embedding_model,
-                        "embedding_device": embedding_device
+                        "embedding_device": embedding_device, "vector_db": selected_vector_db
                     }
                     st.session_state.config = current_config
 
@@ -213,7 +237,8 @@ with st.sidebar:
                         llm_model=llm_model,
                         groq_api_key=groq_api_key if llm_provider == "groq" else None,
                         cerebras_api_key=os.getenv("CEREBRAS_API_KEY") if llm_provider == "cerebras" else None,
-                        temperature=temperature
+                        temperature=temperature,
+                        vector_db=selected_vector_db
                     )
 
                     # Process files based on upload type and processing type
@@ -313,7 +338,7 @@ else:
     # Display the configuration that was used for the current chat session
     config = st.session_state.config
     processing_mode = "Enhanced" if config.get('enhanced', False) else "Basic"
-    st.info(f"**Current Configuration:** Mode: `{processing_mode}`, LLM: `{config.get('llm_provider', 'N/A')}/{config['model']}`, Temp: `{config['temp']}`, "
+    st.info(f"**Current Configuration:** Mode: `{processing_mode}`, LLM: `{config.get('llm_provider', 'N/A')}/{config['model']}`,  Vector DB: `{config.get('vector_db', 'N/A')}`, Temp: `{config['temp']}`, "
             f"Embedding: `{config.get('embedding_provider', 'N/A')}/{config.get('embedding_model', 'N/A')}`, "
             f"Chunk Size: `{config['chunk_size']}`, Overlap: `{config['overlap']}`, Top K: `{config['top_k']}`")
 

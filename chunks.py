@@ -30,6 +30,32 @@ except ImportError:
     COHERE_AVAILABLE = False
 
 
+# Import other vector stores conditionally
+try:
+    from langchain_community.vectorstores import Qdrant
+except ImportError:
+    Qdrant = None
+
+try:
+    from langchain_community.vectorstores import Chroma
+except ImportError:
+    Chroma = None
+
+try:
+    from langchain_community.vectorstores import Pinecone
+except ImportError:
+    Pinecone = None
+
+try:
+    from langchain_community.vectorstores import Weaviate
+except ImportError:
+    Weaviate = None
+
+try:
+    from langchain_community.vectorstores import Milvus
+except ImportError:
+    Milvus = None
+
 # --- LLM and RAG Chain ---
 from langchain_groq import ChatGroq
 
@@ -75,7 +101,7 @@ class RAGProcessor:
     Supports both Groq and Cerebras LLM providers.
     """
     def __init__(self, llm_provider: str, llm_model: str, groq_api_key: str = None,
-                 cerebras_api_key: str = None, temperature: float = 0.1):
+                 cerebras_api_key: str = None, temperature: float = 0.1, vector_db: str = None):
         """
         Initializes the RAG processor with flexible LLM provider support.
 
@@ -85,6 +111,7 @@ class RAGProcessor:
             groq_api_key (str): The Groq API key (required if provider is 'groq').
             cerebras_api_key (str): The Cerebras API key (required if provider is 'cerebras').
             temperature (float): The temperature for the LLM's generation.
+            vector_db (str): Vector database to use (overrides env variable).
         """
         self.llm_provider = llm_provider
         self.llm_model = llm_model
@@ -92,6 +119,7 @@ class RAGProcessor:
         self.vector_store = None
         self.retrieval_chain = None
         self.top_k = 4  # Default value
+        self.vector_db = vector_db or os.getenv('VECTOR_DB', 'faiss').lower()
 
         # 1. Initialize the LLM based on provider
         if llm_provider == "groq":
@@ -430,12 +458,9 @@ class RAGProcessor:
         print(f"PDF split into {len(chunks)} chunks with size {chunk_size} and overlap {chunk_overlap}.")
         
         # 3. Create a vector store from the chunks
-        print("Creating vector store...")
-        self.vector_store = FAISS.from_documents(
-            documents=chunks,
-            embedding=self.embedding_model
-        )
-        print("Vector store created successfully.")
+        print(f"Creating {self.vector_db} vector store...")
+        self.vector_store = self._create_vector_store(chunks)
+        print(f"{self.vector_db.title()} vector store created successfully.")
         
         # 4. Create the core RAG chain
         question_answer_chain = create_stuff_documents_chain(self.llm, self.prompt)
@@ -449,6 +474,112 @@ class RAGProcessor:
             question_answer_chain
         )
         print(f"RAG pipeline is ready. Retriever will use top_k={top_k}.")
+
+    def _create_vector_store(self, chunks):
+        """
+        Create vector store based on the configured database type.
+
+        Args:
+            chunks: Document chunks to index
+
+        Returns:
+            Vector store instance
+        """
+        if self.vector_db == 'faiss':
+            return FAISS.from_documents(
+                documents=chunks,
+                embedding=self.embedding_model
+            )
+
+        elif self.vector_db == 'qdrant':
+            if Qdrant is None:
+                raise ImportError("qdrant-client not installed. Run: pip install qdrant-client")
+
+            url = os.getenv('QDRANT_URL', 'http://localhost:6333')
+            api_key = os.getenv('QDRANT_API_KEY')
+            collection_name = 'pdf_documents'
+
+            return Qdrant.from_documents(
+                chunks,
+                self.embedding_model,
+                url=url,
+                api_key=api_key,
+                collection_name=collection_name
+            )
+
+        elif self.vector_db == 'chroma':
+            if Chroma is None:
+                raise ImportError("chromadb not installed. Run: pip install chromadb")
+
+            persist_directory = './chroma_db'
+            collection_name = 'pdf_documents'
+
+            return Chroma.from_documents(
+                chunks,
+                self.embedding_model,
+                persist_directory=persist_directory,
+                collection_name=collection_name
+            )
+
+        elif self.vector_db == 'pinecone':
+            if Pinecone is None:
+                raise ImportError("pinecone-client not installed. Run: pip install pinecone-client")
+
+            import pinecone
+
+            api_key = os.getenv('PINECONE_API_KEY')
+            environment = os.getenv('PINECONE_ENVIRONMENT')
+            index_name = 'pdf-documents'
+
+            if not api_key or not environment:
+                raise ValueError("PINECONE_API_KEY and PINECONE_ENVIRONMENT must be set")
+
+            pinecone.init(api_key=api_key, environment=environment)
+            return Pinecone.from_documents(chunks, self.embedding_model, index_name=index_name)
+
+        elif self.vector_db == 'weaviate':
+            if Weaviate is None:
+                raise ImportError("weaviate-client not installed. Run: pip install weaviate-client")
+
+            import weaviate
+
+            url = os.getenv('WEAVIATE_URL', 'http://localhost:8080')
+            api_key = os.getenv('WEAVIATE_API_KEY')
+
+            client = weaviate.Client(
+                url=url,
+                auth_client_secret=weaviate.AuthApiKey(api_key) if api_key else None
+            )
+
+            return Weaviate.from_documents(
+                chunks,
+                self.embedding_model,
+                client=client,
+                by_text=False
+            )
+
+        elif self.vector_db == 'milvus':
+            if Milvus is None:
+                raise ImportError("pymilvus not installed. Run: pip install pymilvus")
+
+            host = os.getenv('MILVUS_HOST', 'localhost')
+            port = os.getenv('MILVUS_PORT', '19530')
+            collection_name = 'pdf_documents'
+
+            connection_args = {
+                'host': host,
+                'port': port
+            }
+
+            return Milvus.from_documents(
+                chunks,
+                self.embedding_model,
+                collection_name=collection_name,
+                connection_args=connection_args
+            )
+
+        else:
+            raise ValueError(f"Unsupported vector database: {self.vector_db}. Supported: faiss, qdrant, chroma, pinecone, weaviate, milvus")
 
     def setup_rag_pipeline_multiple(self, pdf_paths: list, chunk_size: int, chunk_overlap: int, top_k: int):
         """
