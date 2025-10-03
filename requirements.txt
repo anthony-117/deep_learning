@@ -22,3 +22,7 @@ chromadb
 pinecone-client
 weaviate-client
 pymilvus
+uuid
+streamlit
+plotly
+pandas

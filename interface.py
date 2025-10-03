@@ -2,6 +2,7 @@
 import streamlit as st
 from chunks import RAGProcessor # Import the updated class
 import os
+import uuid
 
 # --- Page Configuration ---
 st.set_page_config(page_title="Customizable PDF Chatbot", layout="wide", initial_sidebar_state="expanded")
@@ -357,7 +358,7 @@ for message in st.session_state.messages:
                             value=chunk['content'],
                             height=100,
                             disabled=True,
-                            key=f"hist_chunk_{chunk['rank']}_{hash(chunk['content'][:50])}"
+                            key=f"hist_chunk_{len(st.session_state.messages)}_{chunk['rank']}_{uuid.uuid4()}"
                         )
                     if chunk['metadata']:
                         page_num = chunk['metadata'].get('page', 'Unknown')
@@ -410,7 +411,7 @@ if prompt := st.chat_input("Ask a question about your document...", disabled=not
                                 value=chunk['content'],
                                 height=100,
                                 disabled=True,
-                                key=f"chunk_{chunk['rank']}_{hash(chunk['content'][:50])}"
+                                key=f"current_chunk_{chunk['rank']}_{hash(chunk['content'])}_{uuid.uuid4()}"
                             )
                         if chunk['metadata']:
                             page_num = chunk['metadata'].get('page', 'Unknown')

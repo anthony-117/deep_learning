@@ -10,6 +10,7 @@ help:
 	@echo "Application:"
 	@echo "  make install     - Install Python dependencies"
 	@echo "  make run         - Start the Streamlit application"
+	@echo "  make dashboard   - Start the RAG monitoring dashboard"
 	@echo "  make clean       - Clean up temporary files and volumes"
 	@echo ""
 	@echo "Vector Databases:"
@@ -18,6 +19,10 @@ help:
 	@echo "  make start-weaviate  - Start Weaviate vector database"
 	@echo "  make start-chroma    - Start ChromaDB vector database"
 	@echo "  make start-milvus    - Start Milvus vector database"
+	@echo ""
+	@echo "Monitoring:"
+	@echo "  make start-grafana   - Start Grafana monitoring dashboard"
+	@echo "  make stop-grafana    - Stop Grafana"
 	@echo ""
 	@echo "Database Management:"
 	@echo "  make stop-qdrant     - Stop Qdrant"
@@ -34,6 +39,7 @@ help:
 	@echo "  make logs-milvus     - Show Milvus logs"
 	@echo ""
 	@echo "Data Management:"
+	@echo "  make setup-db        - Initialize/setup the RAG logs database"
 	@echo "  make clean-data      - Remove all vector database data"
 	@echo "  make backup-data     - Backup vector database data"
 
@@ -43,6 +49,9 @@ install:
 
 run:
 	streamlit run interface.py
+
+dashboard:
+	streamlit run streamlit_dashboard.py
 
 # Vector Database startup commands
 start-faiss:
@@ -79,6 +88,14 @@ start-milvus:
 	@echo "Milvus started at http://localhost:19530"
 	@echo "Run 'make run' to start the application"
 
+# Monitoring commands
+start-grafana:
+	@echo "Starting Grafana monitoring dashboard..."
+	docker-compose -f docker/grafana/docker-compose.yml up -d
+	@echo "Grafana started at http://localhost:3000"
+	@echo "Default login: admin / admin"
+	@echo "Database will be available at /var/lib/grafana/rag_logs.db inside container"
+
 # Stop commands
 stop-qdrant:
 	docker-compose -f docker/qdrant/docker-compose.yml down
@@ -91,6 +108,9 @@ stop-chroma:
 
 stop-milvus:
 	docker-compose -f docker/milvus/docker-compose.yml down
+
+stop-grafana:
+	docker-compose -f docker/grafana/docker-compose.yml down
 
 stop-all:
 	@echo "Stopping all vector databases..."
@@ -132,6 +152,17 @@ logs-milvus:
 	docker-compose -f docker/milvus/docker-compose.yml logs -f
 
 # Data management
+setup-db:
+	@echo "Setting up RAG logs database..."
+	@if [ -f "rag_logs.db" ]; then \
+		echo "Database already exists. Creating backup..."; \
+		cp rag_logs.db rag_logs.db.backup.$$(date +%Y%m%d_%H%M%S); \
+	fi
+	@echo "Initializing database schema..."
+	sqlite3 rag_logs.db < db_schema.sql
+	@echo "RAG logs database setup complete!"
+	@echo "Database file: rag_logs.db"
+
 clean-data:
 	@echo "WARNING: This will delete all vector database data!"
 	@read -p "Are you sure? (y/N): " confirm && [ "$$confirm" = "y" ] || exit 1

@@ -95,6 +95,14 @@ except ImportError:
 # Load environment variables from .env file
 load_dotenv()
 
+# Import the logger
+try:
+    from rag_logger import RAGLogger
+    LOGGER_AVAILABLE = True
+except ImportError:
+    LOGGER_AVAILABLE = False
+    print("RAGLogger not available. Logging disabled.")
+
 class RAGProcessor:
     """
     A class to handle the entire RAG pipeline from PDF processing to answering queries.
@@ -120,6 +128,24 @@ class RAGProcessor:
         self.retrieval_chain = None
         self.top_k = 4  # Default value
         self.vector_db = vector_db or os.getenv('VECTOR_DB', 'faiss').lower()
+
+        # Initialize logging
+        self.logger = None
+        self.session_id = None
+        self.config_id = None
+        if LOGGER_AVAILABLE:
+            self.logger = RAGLogger()
+
+        # Store config for logging
+        self.config = {
+            'llm_provider': llm_provider,
+            'model': llm_model,
+            'temp': temperature,
+            'embedding_provider': os.getenv("EMBEDDING_PROVIDER", "huggingface"),
+            'embedding_model': os.getenv("EMBEDDING_MODEL", "all-MiniLM-L6-v2"),
+            'embedding_device': os.getenv("EMBEDDING_DEVICE", "cpu"),
+            'vector_db': self.vector_db
+        }
 
         # 1. Initialize the LLM based on provider
         if llm_provider == "groq":
@@ -419,6 +445,18 @@ class RAGProcessor:
 
         self.retrieval_chain = create_retrieval_chain(retriever, question_answer_chain)
 
+        # Update config with pipeline settings and log configuration
+        self.config.update({
+            'chunk_size': chunk_size,
+            'overlap': chunk_overlap,
+            'top_k': top_k,
+            'enhanced': True
+        })
+
+        if self.logger:
+            self.config_id = self.logger.log_configuration(self.config)
+            self.session_id = self.logger.create_session(self.config_id, "Enhanced Pipeline Session")
+
         print(f"Enhanced RAG pipeline ready with {len(pdf_paths)} files and {len(all_chunks)} chunks.")
 
     def setup_rag_pipeline(self, pdf_path: str, chunk_size: int, chunk_overlap: int, top_k: int):
@@ -473,6 +511,19 @@ class RAGProcessor:
             retriever,
             question_answer_chain
         )
+
+        # Update config with pipeline settings and log configuration
+        self.config.update({
+            'chunk_size': chunk_size,
+            'overlap': chunk_overlap,
+            'top_k': top_k,
+            'enhanced': False
+        })
+
+        if self.logger:
+            self.config_id = self.logger.log_configuration(self.config)
+            self.session_id = self.logger.create_session(self.config_id, "Basic Pipeline Session")
+
         print(f"RAG pipeline is ready. Retriever will use top_k={top_k}.")
 
     def _create_vector_store(self, chunks):
@@ -645,6 +696,19 @@ class RAGProcessor:
             retriever,
             question_answer_chain
         )
+
+        # Update config with pipeline settings and log configuration
+        self.config.update({
+            'chunk_size': chunk_size,
+            'overlap': chunk_overlap,
+            'top_k': top_k,
+            'enhanced': False
+        })
+
+        if self.logger:
+            self.config_id = self.logger.log_configuration(self.config)
+            self.session_id = self.logger.create_session(self.config_id, "Multiple Files Pipeline Session")
+
         print(f"RAG pipeline is ready with {len(pdf_paths)} files. Retriever will use top_k={top_k}.")
 
     def ask_question(self, query: str) -> dict:
@@ -655,6 +719,9 @@ class RAGProcessor:
             raise RuntimeError("RAG pipeline has not been set up. Call setup_rag_pipeline() first.")
 
         print(f"Invoking chain with query: '{query}'")
+
+        import time
+        start_time = time.time()
 
         # Get documents with similarity scores
         docs_with_scores = self.vector_store.similarity_search_with_score(query, k=self.top_k)
@@ -673,8 +740,25 @@ class RAGProcessor:
         # Get the standard response from the chain
         response = self.retrieval_chain.invoke({"input": query})
 
+        # Calculate response time
+        response_time = time.time() - start_time
+
         # Replace the context with our ordered version
         response["ordered_context"] = ordered_context
+
+        # Log the query-response if logger is available
+        if self.logger and self.session_id and self.config_id:
+            try:
+                self.logger.log_query_response(
+                    session_id=self.session_id,
+                    config_id=self.config_id,
+                    question=query,
+                    answer=response.get("answer", ""),
+                    retrieved_chunks=ordered_context,
+                    response_time=response_time
+                )
+            except Exception as e:
+                print(f"Logging failed: {e}")
 
         return response
 

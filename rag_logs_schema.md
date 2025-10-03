@@ -1,0 +1,222 @@
+# RAG Logs Database Schema
+
+```mermaid
+erDiagram
+    CONFIGURATIONS {
+        uuid config_id PK
+        string llm_provider "groq, cerebras"
+        string llm_model "model name"
+        float temperature "0.0-1.0"
+        string embedding_provider "huggingface, cohere"
+        string embedding_model "model name"
+        string embedding_device "cpu, cuda"
+        string vector_db "faiss, qdrant, etc"
+        int chunk_size "256-2048"
+        int chunk_overlap "0-512"
+        int top_k "1-10"
+        boolean enhanced_processing "true/false"
+        timestamp created_at
+        string config_hash "MD5 hash for quick comparison"
+    }
+
+    DOCUMENTS {
+        uuid document_id PK
+        string filename
+        string file_path
+        string file_hash "MD5 of file content"
+        int file_size_bytes
+        int total_pages
+        timestamp uploaded_at
+        timestamp processed_at
+        string processing_status "pending, processing, completed, failed"
+    }
+
+    CHAT_SESSIONS {
+        uuid session_id PK
+        uuid config_id FK
+        timestamp started_at
+        timestamp last_activity
+        string session_name "optional user-defined name"
+        boolean is_active
+    }
+
+    DOCUMENT_SESSIONS {
+        uuid document_id FK
+        uuid session_id FK
+        timestamp added_at
+    }
+
+    QUERIES {
+        uuid query_id PK
+        uuid session_id FK
+        uuid config_id FK
+        text user_question
+        timestamp asked_at
+        float response_time_seconds
+        int retrieved_chunks_count
+        string query_hash "MD5 of question for duplicate detection"
+    }
+
+    RESPONSES {
+        uuid response_id PK
+        uuid query_id FK
+        text model_answer
+        float confidence_score "if available"
+        timestamp generated_at
+        json raw_response "full model response object"
+        string response_hash "MD5 of answer"
+    }
+
+    RETRIEVED_CHUNKS {
+        uuid chunk_id PK
+        uuid query_id FK
+        uuid document_id FK
+        text chunk_content
+        int chunk_index "position in document"
+        int page_number
+        float similarity_score
+        int relevance_rank "1, 2, 3, etc"
+        float relevance_percentage
+        json metadata "source, approx_lines, etc"
+        string chunk_hash "MD5 of content"
+    }
+
+    EMBEDDINGS_CACHE {
+        uuid embedding_id PK
+        string content_hash "MD5 of text content"
+        string embedding_provider
+        string embedding_model
+        blob embedding_vector
+        timestamp created_at
+        int vector_dimension
+    }
+
+    PERFORMANCE_METRICS {
+        uuid metric_id PK
+        uuid query_id FK
+        float embedding_time_seconds
+        float retrieval_time_seconds
+        float llm_response_time_seconds
+        float total_time_seconds
+        int memory_usage_mb
+        timestamp recorded_at
+    }
+
+    COMPARISONS {
+        uuid comparison_id PK
+        string comparison_name
+        text description
+        json query_filter "filters for selecting queries"
+        json config_filter "filters for selecting configs"
+        timestamp created_at
+        string created_by "user identifier"
+    }
+
+    COMPARISON_RESULTS {
+        uuid result_id PK
+        uuid comparison_id FK
+        uuid query_id FK
+        uuid config_id FK
+        uuid response_id FK
+        float similarity_to_baseline "if comparing to baseline"
+        json evaluation_metrics "BLEU, ROUGE, custom scores"
+        text human_rating "if manually evaluated"
+        timestamp evaluated_at
+    }
+
+    USER_FEEDBACK {
+        uuid feedback_id PK
+        uuid response_id FK
+        int rating "1-5 stars"
+        text feedback_text
+        boolean helpful
+        json tags "accuracy, relevance, completeness"
+        timestamp submitted_at
+        string user_id "anonymous or identified"
+    }
+
+    %% Relationships
+    CONFIGURATIONS ||--o{ CHAT_SESSIONS : "uses"
+    CONFIGURATIONS ||--o{ QUERIES : "generates"
+
+    CHAT_SESSIONS ||--o{ QUERIES : "contains"
+    CHAT_SESSIONS ||--o{ DOCUMENT_SESSIONS : "processes"
+
+    DOCUMENTS ||--o{ DOCUMENT_SESSIONS : "included_in"
+    DOCUMENTS ||--o{ RETRIEVED_CHUNKS : "source_of"
+
+    QUERIES ||--|| RESPONSES : "answered_by"
+    QUERIES ||--o{ RETRIEVED_CHUNKS : "retrieves"
+    QUERIES ||--o{ PERFORMANCE_METRICS : "measured"
+    QUERIES ||--o{ COMPARISON_RESULTS : "analyzed_in"
+
+    RESPONSES ||--o{ USER_FEEDBACK : "receives"
+    RESPONSES ||--o{ COMPARISON_RESULTS : "compared_in"
+
+    COMPARISONS ||--o{ COMPARISON_RESULTS : "contains"
+```
+
+## Key Schema Features
+
+### **1. Configuration Tracking**
+- Complete RAG pipeline configuration storage
+- Config hash for quick duplicate detection
+- Supports all parameters from your interface
+
+### **2. Document Management**
+- File metadata and processing status
+- Hash-based duplicate detection
+- Many-to-many relationship with sessions
+
+### **3. Query-Response Logging**
+- Full question-answer pairs with timestamps
+- Performance metrics for each query
+- Retrieved context with relevance scores
+
+### **4. Comparison Framework**
+- Flexible comparison system for A/B testing configs
+- Support for automated and manual evaluation
+- Baseline comparison capabilities
+
+### **5. Caching & Performance**
+- Embeddings cache to avoid recomputation
+- Detailed performance metrics
+- Memory usage tracking
+
+### **6. User Feedback Loop**
+- Rating and feedback collection
+- Tagging system for categorizing responses
+- Anonymous or identified user support
+
+## Usage Examples
+
+### **Compare Configurations**
+```sql
+-- Find all queries answered by different LLM providers
+SELECT DISTINCT c.llm_provider, c.llm_model, COUNT(q.query_id)
+FROM CONFIGURATIONS c
+JOIN QUERIES q ON c.config_id = q.config_id
+GROUP BY c.llm_provider, c.llm_model;
+```
+
+### **Performance Analysis**
+```sql
+-- Average response time by configuration
+SELECT c.config_hash, c.llm_provider, c.llm_model,
+       AVG(pm.total_time_seconds) as avg_response_time
+FROM CONFIGURATIONS c
+JOIN QUERIES q ON c.config_id = q.config_id
+JOIN PERFORMANCE_METRICS pm ON q.query_id = pm.query_id
+GROUP BY c.config_hash, c.llm_provider, c.llm_model;
+```
+
+### **Answer Quality Comparison**
+```sql
+-- Compare user ratings across different embedding models
+SELECT c.embedding_model, AVG(uf.rating) as avg_rating
+FROM CONFIGURATIONS c
+JOIN QUERIES q ON c.config_id = q.config_id
+JOIN RESPONSES r ON q.query_id = r.query_id
+JOIN USER_FEEDBACK uf ON r.response_id = uf.response_id
+GROUP BY c.embedding_model;
+```
