@@ -1,0 +1,26 @@
+version: '3.8'
+
+services:
+  grafana:
+    build: .
+    container_name: rag-grafana
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_SECURITY_ALLOW_EMBEDDING=true
+      - GF_AUTH_ANONYMOUS_ENABLED=true
+      - GF_AUTH_ANONYMOUS_ORG_ROLE=Viewer
+    volumes:
+      - grafana-storage:/var/lib/grafana
+      - ./provisioning:/etc/grafana/provisioning
+      - ../../rag_logs.db:/var/lib/grafana/rag_logs.db:ro
+      - ./dashboards:/var/lib/grafana/dashboards
+volumes:
+  grafana-storage:
+    driver: local
+
+networks:
+  rag-network:
+    driver: bridge

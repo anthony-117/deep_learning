@@ -3,3 +3,5 @@
 __pycache__/
 volumes/
 chroma_db/
+grafana-store/
+rag_logs.db
