@@ -175,13 +175,13 @@ class RAGProcessor:
         
         # 3. Define the enhanced RAG Prompt Template for multimodal content
         system_prompt = (
-            "You are an assistant for question-answering tasks. "
-            "Use the following retrieved context to answer the question. "
-            "The context may include text, tables, and descriptions of images/diagrams. "
-            "When referencing tables, preserve their structure in your response. "
-            "When discussing images or diagrams, mention the visual elements described. "
-            "If you don't know the answer, just say that you don't know. "
-            "Keep the answer comprehensive but concise.\n\n"
+            "you are an assistant for question-answering tasks. "
+            "use the following retrieved context to answer the question. "
+            "the context may include text, tables, and descriptions of images/diagrams. "
+            "when referencing tables, preserve their structure in your response. "
+            "when discussing images or diagrams, mention the visual elements described. "
+            "if you don't know the answer, just say that you don't know. "
+            "keep the answer comprehensive but concise.\n\n"
             "{context}"
         )
         self.prompt = ChatPromptTemplate.from_messages(

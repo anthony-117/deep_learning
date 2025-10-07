@@ -316,21 +316,25 @@ def create_dashboard():
                     """,
                     "table", {"h": 8, "w": 12, "x": 0, "y": 40}
                 ),
-                sql_panel(14, "Configuration Performance",
+                sql_panel(14, "Best Configuration",
                     """
                     SELECT
                         c.config_id as 'Config ID',
-                        c.llm_provider as 'LLM',
+                        c.llm_provider as 'LLM Provider',
+                        c.llm_model as 'Model',
                         c.embedding_model as 'Embedding',
-                        c.vector_store as 'Vector DB',
+                        c.vector_db as 'Vector DB',
+                        c.chunk_size as 'Chunk Size',
+                        c.top_k as 'Top K',
                         COUNT(q.query_id) as 'Queries',
                         ROUND(AVG(q.response_time_seconds), 3) as 'Avg Time (s)'
                     FROM configurations c
                     LEFT JOIN queries q ON c.config_id = q.config_id
-                    GROUP BY c.config_id, c.llm_provider, c.embedding_model, c.vector_store
-                    HAVING COUNT(q.query_id) >= 1
-                    ORDER BY 'Avg Time (s)' ASC
-                    LIMIT 10
+                    WHERE q.response_time_seconds IS NOT NULL
+                    GROUP BY c.config_id
+                    HAVING COUNT(q.query_id) >= 3
+                    ORDER BY AVG(q.response_time_seconds) ASC
+                    LIMIT 1
                     """,
                     "table", {"h": 8, "w": 12, "x": 12, "y": 40}
                 )
@@ -380,33 +384,3 @@ def create_dashboard():
 
 def setup_alerts():
     print("⚠️ Alert setup requires manual configuration in Grafana UI")
-
-
-def main():
-    print("🚀 Setting up Grafana for RAG Performance Monitoring")
-    print("=" * 50)
-
-    if not wait_for_grafana():
-        print("❌ Grafana is not responding. Please check if it's running.")
-        print("💡 Run: sudo systemctl start grafana-server")
-        return False
-
-    if not create_datasource():
-        return False
-
-    # Wait longer to ensure datasource is registered
-    time.sleep(8)
-
-    if not create_dashboard():
-        return False
-
-    setup_alerts()
-
-    print("\n" + "=" * 50)
-    print("🎉 Setup completed successfully!")
-    print(f"📊 Open your dashboard: {GRAFANA_URL}")
-    print("🔑 Login: admin / admin (change password on first login)")
-
-
-if __name__ == "__main__":
-    main()
