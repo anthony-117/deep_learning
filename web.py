@@ -1,6 +1,6 @@
 # streamlit_app.py
 import streamlit as st
-from chunks import RAGProcessor # Import the updated class
+from src.chunks import RAGProcessor # Import the updated class
 import os
 import uuid
 
