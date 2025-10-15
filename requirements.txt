@@ -19,3 +19,4 @@ uuid~=1.30
 matplotlib~=3.10.6
 seaborn~=0.13.2
 requests~=2.32.5
+tesserocr~=2.9.1
