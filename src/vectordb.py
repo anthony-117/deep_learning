@@ -1,8 +1,11 @@
 from typing import Optional
 from langchain_core.documents import Document
 from langchain_core.vectorstores import VectorStoreRetriever
-from langchain_huggingface.embeddings import HuggingFaceEmbeddings
 from langchain_milvus import Milvus
+
+from langchain_core.embeddings import Embeddings
+
+from pymilvus import utility, connections
 
 from .config import config
 
@@ -10,14 +13,35 @@ from .config import config
 class VectorStore:
 
     def __init__(
-        self,
-        embedding: HuggingFaceEmbeddings,
-        collection_name: str = "docling_demo"
+            self,
+            embedding: Embeddings,
+            collection_name: str = "docling_demo",
+            drop_old: bool = False,
     ) -> None:
-        self.embedding: HuggingFaceEmbeddings = embedding
+
+        self.embedding = embedding
         self.collection_name: str = collection_name
         self.vectorstore: Optional[Milvus] = None
 
+        # Try to connect and check if collection exists
+        try:
+            connections.connect(
+                alias="default",
+                host=config.VECTOR_HOST,
+                port=config.VECTOR_PORT
+            )
+
+            if utility.has_collection(self.collection_name):
+                # Connect to existing collection
+                self.vectorstore = Milvus(
+                    embedding_function=embedding,
+                    collection_name=self.collection_name,
+                    connection_args={"host": config.VECTOR_HOST, "port": config.VECTOR_PORT},
+                )
+        except Exception:
+            # If connection fails, vectorstore remains None
+            # Will be initialized later via create_from_documents
+            pass
 
     def create_from_documents(
         self,
@@ -31,11 +55,15 @@ class VectorStore:
             documents=documents,
             embedding=self.embedding,
             collection_name=self.collection_name,
-            connection_args={"uri": config.VECTOR_URI},
-            index_params={"index_type": "FLAT"},
+            connection_args={"host": config.VECTOR_HOST, "port": config.VECTOR_PORT},
+            index_params={
+                "index_type": "FLAT",
+                "metric_type": "IP"  # use "L2" for Euclidean
+            },
             drop_old=drop_old,
         )
         return self.vectorstore
+
 
     def add_documents(self, documents: list[Document]) -> list[str]:
         if not self.vectorstore:
@@ -48,7 +76,7 @@ class VectorStore:
 
         return self.vectorstore.add_documents(documents)
 
-    def get_retriever(self, top_k: int = 5) -> VectorStoreRetriever:
+    def get_retriever(self, top_k: int = config.TOP_K) -> VectorStoreRetriever:
         if not self.vectorstore:
             raise RuntimeError(
                 "Vector store not initialized. Call create_from_documents() first."
@@ -57,9 +85,9 @@ class VectorStore:
         return self.vectorstore.as_retriever(search_kwargs={"k": top_k})
 
     def similarity_search(
-        self,
-        query: str,
-        k: int = 5
+            self,
+            query: str,
+            k: int = 5
     ) -> list[Document]:
         if not self.vectorstore:
             raise RuntimeError(
