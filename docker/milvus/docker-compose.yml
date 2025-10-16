@@ -13,6 +13,13 @@ services:
       ETCD_CONFIG_PATH: "/milvus/configs/embedEtcd.yaml"
       COMMON_STORAGETYPE: "local"
       DEPLOY_MODE: "STANDALONE"
+      MINIO_ADDRESS: "localhost:9000"
+      MINIO_USE_SSL: "false"
+      COMMON_SECURITY_AUTHORIZATIONENABLED: "false"
+      LOCAL_STORAGE_PATH: "/var/lib/milvus/data"
+      QUERYNODE_LOCAL_PATH: "/var/lib/milvus/data/querynode"
+      DATANODE_LOCAL_PATH: "/var/lib/milvus/data/datanode"
+      INDEXNODE_LOCAL_PATH: "/var/lib/milvus/data/indexnode"
     ports:
       - "19530:19530"
       - "9091:9091"
