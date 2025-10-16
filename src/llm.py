@@ -1,15 +1,17 @@
 from langchain_core.prompts import ChatPromptTemplate
-from langchain_huggingface import HuggingFaceEndpoint
+from langchain_groq import ChatGroq
+from langchain_core.language_models import BaseChatModel
 
 from .config import config
 
 
-class LLM:
+class LLMModel:
 
     def __init__(self) -> None:
-        self.llm: HuggingFaceEndpoint = HuggingFaceEndpoint(
-            repo_id=config.GEN_MODEL_ID,
-            huggingfacehub_api_token=config.HF_TOKEN,
+        self.llm: BaseChatModel = ChatGroq(
+            api_key = config.GROQ_API_KEY,
+            model = config.GEN_MODEL_ID,
+            temperature = config.GEN_TEMPERATURE,
         )
 
         self.system_prompt: ChatPromptTemplate = ChatPromptTemplate.from_template(
@@ -23,7 +25,7 @@ class LLM:
             "Answer:\n"
         )
 
-    def get_llm(self) -> HuggingFaceEndpoint:
+    def get_llm(self) -> BaseChatModel:
         return self.llm
 
     def get_prompt(self) -> ChatPromptTemplate:

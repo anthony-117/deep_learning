@@ -1,7 +1,7 @@
 from src.config import config
 from src.embedding import EmbeddingModel
 from src.vectordb import VectorStore
-from src.llm import LLM
+from src.llm import LLMModel
 from src.utils import clip_text
 
 def test_integration() -> None:
@@ -31,7 +31,7 @@ def test_integration() -> None:
     print(f"  - Collection: {vectorstore.collection_name}")
 
     # Test 5: LLM
-    llm = LLM()
+    llm = LLMModel()
     print(f"\n✓ LLM initialized")
 
     # Test 6: Processing functions
