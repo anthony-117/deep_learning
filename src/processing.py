@@ -3,16 +3,15 @@ from typing import Optional, Iterator
 
 from docling.datamodel.accelerator_options import AcceleratorOptions, AcceleratorDevice
 from docling_core.transforms.chunker import BaseChunker, PageChunker
-from docling_core.transforms.chunker.hybrid_chunker import HybridChunker
 from docling_core.types import DoclingDocument
-from langchain_docling.loader import BaseMetaExtractor, MetaExtractor, DoclingLoader
+from langchain_docling.loader import BaseMetaExtractor, MetaExtractor
 from langchain_core.documents import Document
 
 from docling.document_converter import DocumentConverter, PdfFormatOption
 from docling.datamodel.base_models import InputFormat
 from docling.datamodel.pipeline_options import PdfPipelineOptions, TesseractCliOcrOptions
 
-DEFAULT_EXTENSIONS = list(InputFormat)
+DEFAULT_EXTENSIONS = ["."+ fmt.value for fmt in InputFormat]
 
 def collect_documents_paths(
         directory_path: Optional[str] = None,
@@ -88,5 +87,5 @@ def _collect_files(directory: Path, extensions: list[str], recursive: bool) -> l
     files = []
     pattern_func = directory.rglob if recursive else directory.glob
     for ext in extensions:
-        files.extend(pattern_func(f"*.{ext}"))
+        files.extend(pattern_func(f"*{ext}"))
     return files
