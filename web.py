@@ -27,7 +27,6 @@ def initialize_rag_system():
             llm = LLMModel()
             vector_store = VectorStore(
                 embedding=embedding_model.get_embedding(),
-                collection_name="docling_demo"
             )
 
             # Note: VectorStore needs to be populated with documents first

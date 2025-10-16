@@ -15,7 +15,7 @@ class VectorStore:
     def __init__(
             self,
             embedding: Embeddings,
-            collection_name: str = "docling_demo",
+            collection_name: str = config.VECTOR_DB_COLLECTION,
             drop_old: bool = False,
     ) -> None:
 
@@ -76,18 +76,10 @@ class VectorStore:
 
         return self.vectorstore.add_documents(documents)
 
-    def get_retriever(self, top_k: int = config.TOP_K) -> VectorStoreRetriever:
-        if not self.vectorstore:
-            raise RuntimeError(
-                "Vector store not initialized. Call create_from_documents() first."
-            )
-
-        return self.vectorstore.as_retriever(search_kwargs={"k": top_k})
-
-    def similarity_search(
+    def search(
             self,
             query: str,
-            k: int = 5
+            k: int = config.TOP_K
     ) -> list[Document]:
         if not self.vectorstore:
             raise RuntimeError(
