@@ -4,6 +4,7 @@ from operator import add
 from langchain_core.documents import Document
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
+from langchain_core.messages import BaseMessage, HumanMessage, AIMessage
 from langgraph.graph import StateGraph, END
 
 from .vectordb import VectorStore
@@ -18,6 +19,7 @@ class GraphState(TypedDict):
     rewrite_count: int
     relevance_scores: list[float]
     answer_grounded: bool
+    chat_history: list[BaseMessage]  # Conversation memory
 
 
 class RAGGraph:
@@ -190,23 +192,33 @@ class RAGGraph:
         return "end"
 
     def _generate_answer(self, state: GraphState) -> GraphState:
-        """Generate answer using retrieved documents."""
+        """Generate answer using retrieved documents and conversation history."""
         question = state["question"]
         documents = state["documents"]
+        chat_history = state.get("chat_history", [])
 
         # Format documents
         context = "\n\n".join([doc.page_content for doc in documents])
 
-        # Generation prompt
+        # Format chat history
+        history_text = ""
+        if chat_history:
+            history_text = "\n\nConversation History:\n"
+            for msg in chat_history[-6:]:  # Last 3 exchanges (6 messages)
+                role = "Human" if isinstance(msg, HumanMessage) else "Assistant"
+                history_text += f"{role}: {msg.content}\n"
+
+        # Generation prompt with conversation context
         gen_prompt = ChatPromptTemplate.from_template(
             """You are an assistant for question-answering tasks.
             Use the following pieces of retrieved context to answer the question.
+            Consider the conversation history to provide contextual answers.
             If you don't know the answer, just say that you don't know.
-            Use three sentences maximum and keep the answer concise.
-
+            Keep the answer concise and relevant to the conversation.
+            {history}
             Question: {question}
 
-            Context: {context}
+            Retrieved Context: {context}
 
             Answer:"""
         )
@@ -215,10 +227,11 @@ class RAGGraph:
 
         generation = chain.invoke({
             "question": question,
-            "context": context
+            "context": context,
+            "history": history_text
         })
 
-        steps = ["Generated answer from documents"]
+        steps = ["Generated answer from documents with conversation context"]
 
         return {
             **state,
@@ -308,12 +321,13 @@ class RAGGraph:
             "steps": steps
         }
 
-    def invoke(self, question: str) -> dict:
+    def invoke(self, question: str, chat_history: Optional[list[BaseMessage]] = None) -> dict:
         """
-        Run the RAG graph with a question.
+        Run the RAG graph with a question and optional chat history.
 
         Args:
             question: User's question
+            chat_history: Optional list of previous messages for context
 
         Returns:
             Dictionary with answer, documents, and processing steps
@@ -325,7 +339,8 @@ class RAGGraph:
             "steps": [],
             "rewrite_count": 0,
             "relevance_scores": [],
-            "answer_grounded": False
+            "answer_grounded": False,
+            "chat_history": chat_history or []
         }
 
         # Run the graph

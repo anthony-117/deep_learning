@@ -1,6 +1,8 @@
 import streamlit as st
 import os
 
+from langchain_core.messages import HumanMessage, AIMessage
+
 from src.embedding import EmbeddingModel
 from src.llm import LLMModel
 from src.vectordb import VectorStore
@@ -133,8 +135,31 @@ def main():
         with st.chat_message("assistant"):
             with st.spinner("Thinking..."):
                 try:
-                    # Invoke the RAG graph
-                    result = rag_graph.invoke(prompt)
+                    # Build chat history from session messages
+                    chat_history = []
+                    last_role = None
+
+                    for msg in st.session_state.messages[:-1]:  # Exclude current message
+                        content = msg.get("content", "")
+                        role = msg.get("role", "")
+
+                        # Skip messages with empty or None content
+                        if not content or not role:
+                            continue
+
+                        # Skip consecutive messages from the same role to maintain alternation
+                        if last_role == role:
+                            continue
+
+                        if role == "user":
+                            chat_history.append(HumanMessage(content=content))
+                            last_role = "user"
+                        elif role == "assistant":
+                            chat_history.append(AIMessage(content=content))
+                            last_role = "assistant"
+
+                    # Invoke the RAG graph with conversation history
+                    result = rag_graph.invoke(prompt, chat_history=chat_history)
 
                     # Extract answer
                     answer = result.get("answer", "I couldn't find a relevant answer.")
