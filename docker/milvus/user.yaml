@@ -1,0 +1,16 @@
+common:
+  storageType: local
+
+localStorage:
+  path: /var/lib/milvus/data
+
+etcd:
+  use:
+    embed: true
+  data:
+    dir: /var/lib/milvus/etcd
+
+log:
+  level: info
+  file:
+    rootPath: /var/lib/milvus/logs

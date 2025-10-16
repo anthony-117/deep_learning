@@ -1,28 +1,13 @@
-langchain
-langchain-groq
-langchain-community
-pypdf
-faiss-cpu
-sentence-transformers
-python-dotenv
-reportlab
-PyMuPDF
-tabula-py
-pillow
-opencv-python
-camelot-py[cv]
-
-# Additional embedding providers (optional - install as needed)
-langchain-openai    # For OpenAI embeddings and Cerebras LLM
-langchain-cohere    # For Cohere embeddings
-
-# Vector Database Dependencies (install as needed)
-qdrant-client
-chromadb
-pinecone-client
-weaviate-client
-pymilvus
-uuid
-streamlit
-plotly
-pandas
+pandas~=2.3.3
+numpy~=2.2.6
+pydantic~=2.10.6
+langchain-core~=0.3.78
+docling~=2.57.0
+streamlit~=1.50.0
+uuid~=1.30
+matplotlib~=3.10.6
+seaborn~=0.13.2
+requests~=2.32.5
+langgraph~=0.2.62
+colorama~=0.4.6
+pymilvus~=2.6.2
