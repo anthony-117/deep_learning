@@ -7,3 +7,6 @@ grafana-store/
 rag_logs.db
 downloads/
 temp/
+documents.db
+documents/
+test/
