@@ -33,6 +33,3 @@ class LLMModel:
 
     def get_system_prompt(self) -> BaseChatPromptTemplate:
         return self.system_prompt
-
-    def get_prompt(self) -> ChatPromptTemplate:
-        return self.system_prompt
