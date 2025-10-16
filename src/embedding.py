@@ -1,5 +1,6 @@
 from typing import Optional
 from langchain_huggingface.embeddings import HuggingFaceEmbeddings
+from langchain_core.embeddings import Embeddings
 
 from .config import config
 
@@ -12,5 +13,5 @@ class EmbeddingModel:
             model_name=self.model_id
         )
 
-    def get_embedding(self) -> HuggingFaceEmbeddings:
+    def get_embedding(self) -> Embeddings:
         return self.embedding
