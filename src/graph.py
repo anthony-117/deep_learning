@@ -28,11 +28,11 @@ class RAGGraph:
     """
 
     def __init__(
-        self,
-        vector_store: VectorStore,
-        llm: LLMModel,
-        max_rewrites: int = 2,
-        relevance_threshold: float = 0.5
+            self,
+            vector_store: VectorStore,
+            llm: LLMModel,
+            max_rewrites: int = 2,
+            relevance_threshold: float = 0.5
     ):
         """
         Initialize the RAG graph.
@@ -45,7 +45,7 @@ class RAGGraph:
         """
         self.vector_store = vector_store
         self.llm = llm.get_llm()
-        self.retriever = vector_store.get_retriever()
+        self.system_prompt = llm.get_system_prompt()
         self.max_rewrites = max_rewrites
         self.relevance_threshold = relevance_threshold
 
@@ -113,7 +113,7 @@ class RAGGraph:
     def _retrieve_documents(self, state: GraphState) -> GraphState:
         """Retrieve relevant documents from vector store."""
         question = state["question"]
-        documents = self.retriever.invoke(question)
+        documents = self.vector_store.search(question)
 
         steps = [f"Retrieved {len(documents)} documents"]
 
@@ -209,19 +209,7 @@ class RAGGraph:
                 history_text += f"{role}: {msg.content}\n"
 
         # Generation prompt with conversation context
-        gen_prompt = ChatPromptTemplate.from_template(
-            """You are an assistant for question-answering tasks.
-            Use the following pieces of retrieved context to answer the question.
-            Consider the conversation history to provide contextual answers.
-            If you don't know the answer, just say that you don't know.
-            Keep the answer concise and relevant to the conversation.
-            {history}
-            Question: {question}
-
-            Retrieved Context: {context}
-
-            Answer:"""
-        )
+        gen_prompt = self.system_prompt
 
         chain = gen_prompt | self.llm | StrOutputParser()
 
