@@ -1,5 +1,3 @@
-from typing import TYPE_CHECKING
-
 from langchain_core.language_models import BaseChatModel
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
