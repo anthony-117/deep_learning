@@ -1,5 +1,6 @@
 import streamlit as st
 import os
+from pathlib import Path
 
 from langchain_core.messages import HumanMessage, AIMessage
 
@@ -15,6 +16,27 @@ st.set_page_config(
     page_icon="🤖",
     layout="wide"
 )
+
+
+def is_image_document(doc) -> tuple[bool, str]:
+    """
+    Check if a document is an image based on its metadata.
+
+    Returns:
+        tuple: (is_image: bool, file_path: str)
+    """
+    if not doc.metadata:
+        return False, ""
+
+    # Check mimetype
+    if "dl_meta" in doc.metadata and "origin" in doc.metadata["dl_meta"]:
+        origin = doc.metadata["dl_meta"]["origin"]
+        mimetype = origin.get("mimetype", "")
+        if mimetype.startswith("image/"):
+            file_path = doc.metadata.get("file_path", "")
+            return True, file_path
+
+    return False, ""
 
 
 @st.cache_resource
@@ -115,11 +137,50 @@ def main():
                     if docs:
                         with st.expander(f"Source Documents ({len(docs)})"):
                             for i, doc in enumerate(docs):
-                                st.markdown(f"**Document {i+1}:**")
-                                st.text(doc.page_content[:300] + "..." if len(doc.page_content) > 300 else doc.page_content)
+                                # Check if this is an image document
+                                is_image, image_path = is_image_document(doc)
+
+                                # Use appropriate icon
+                                doc_icon = "🖼️" if is_image else "📄"
+                                st.markdown(f"### {doc_icon} Document {i+1}")
+
+                                # Display metadata in a user-friendly way
                                 if doc.metadata:
-                                    st.json(doc.metadata)
-                                st.divider()
+                                    # Domain
+                                    if "domain" in doc.metadata:
+                                        st.markdown(f"**Domain:** `{doc.metadata['domain']}`")
+
+                                    # URL as clickable link
+                                    if "url" in doc.metadata:
+                                        url = doc.metadata["url"]
+                                        # Add protocol if not present
+                                        if not url.startswith(("http://", "https://")):
+                                            full_url = f"https://{url}"
+                                        else:
+                                            full_url = url
+                                        st.markdown(f"**Source:** [{url}]({full_url})")
+
+                                    # Origin info
+                                    if "dl_meta" in doc.metadata and "origin" in doc.metadata["dl_meta"]:
+                                        origin = doc.metadata["dl_meta"]["origin"]
+                                        if "mimetype" in origin:
+                                            st.markdown(f"**Type:** `{origin['mimetype']}`")
+                                        if "filename" in origin:
+                                            st.markdown(f"**File:** `{origin['filename']}`")
+
+                                # Display image or content
+                                if is_image and image_path and Path(image_path).exists():
+                                    st.markdown("**Image:**")
+                                    st.image(image_path, use_container_width=True)
+                                    if doc.page_content:
+                                        st.markdown("**Description:**")
+                                        st.markdown(f"> {doc.page_content}")
+                                else:
+                                    st.markdown("**Content:**")
+                                    st.markdown(f"> {doc.page_content}")
+
+                                if i < len(docs) - 1:
+                                    st.divider()
 
     # Chat input
     if prompt := st.chat_input("Ask a question about your documents..."):
@@ -187,11 +248,50 @@ def main():
                         docs = metadata["documents"]
                         with st.expander(f"Source Documents ({len(docs)})"):
                             for i, doc in enumerate(docs):
-                                st.markdown(f"**Document {i+1}:**")
-                                st.text(doc.page_content[:300] + "..." if len(doc.page_content) > 300 else doc.page_content)
+                                # Check if this is an image document
+                                is_image, image_path = is_image_document(doc)
+
+                                # Use appropriate icon
+                                doc_icon = "🖼️" if is_image else "📄"
+                                st.markdown(f"### {doc_icon} Document {i+1}")
+
+                                # Display metadata in a user-friendly way
                                 if doc.metadata:
-                                    st.json(doc.metadata)
-                                st.divider()
+                                    # Domain
+                                    if "domain" in doc.metadata:
+                                        st.markdown(f"**Domain:** `{doc.metadata['domain']}`")
+
+                                    # URL as clickable link
+                                    if "url" in doc.metadata:
+                                        url = doc.metadata["url"]
+                                        # Add protocol if not present
+                                        if not url.startswith(("http://", "https://")):
+                                            full_url = f"https://{url}"
+                                        else:
+                                            full_url = url
+                                        st.markdown(f"**Source:** [{url}]({full_url})")
+
+                                    # Origin info
+                                    if "dl_meta" in doc.metadata and "origin" in doc.metadata["dl_meta"]:
+                                        origin = doc.metadata["dl_meta"]["origin"]
+                                        if "mimetype" in origin:
+                                            st.markdown(f"**Type:** `{origin['mimetype']}`")
+                                        if "filename" in origin:
+                                            st.markdown(f"**File:** `{origin['filename']}`")
+
+                                # Display image or content
+                                if is_image and image_path and Path(image_path).exists():
+                                    st.markdown("**Image:**")
+                                    st.image(image_path, use_container_width=True)
+                                    if doc.page_content:
+                                        st.markdown("**Description:**")
+                                        st.markdown(f"> {doc.page_content}")
+                                else:
+                                    st.markdown("**Content:**")
+                                    st.markdown(f"> {doc.page_content}")
+
+                                if i < len(docs) - 1:
+                                    st.divider()
 
                     # Add assistant message to chat history
                     st.session_state.messages.append({
