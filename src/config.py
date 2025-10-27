@@ -14,7 +14,7 @@ class Config(BaseModel):
     GROQ_API_KEY: str = Field(default_factory=lambda: os.getenv("GROQ_API_KEY", ""))
     GEN_MODEL_ID: str = "meta-llama/llama-4-scout-17b-16e-instruct"
     GEN_TEMPERATURE: float = 0.05
-    TOP_K: int = 3
+    TOP_K: int = Field(default_factory=lambda: int(os.getenv("TOP_K", "5")))
 
     class Config:
         arbitrary_types_allowed = True
