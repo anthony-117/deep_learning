@@ -8,10 +8,16 @@ help:
 	@echo "Available commands:"
 	@echo ""
 	@echo "Application:"
-	@echo "  make install     - Install Python dependencies"
-	@echo "  make run         - Start the Streamlit application"
-	@echo "  make dashboard   - Start the RAG monitoring dashboard"
-	@echo "  make clean       - Clean up temporary files and volumes"
+	@echo "  make install         - Install Python dependencies"
+	@echo "  make install-frontend - Install frontend dependencies"
+	@echo "  make install-backend  - Install backend dependencies"
+	@echo "  make install-all     - Install all dependencies"
+	@echo "  make run             - Start the Streamlit application"
+	@echo "  make run-frontend    - Start Next.js frontend"
+	@echo "  make run-backend     - Start FastAPI backend"
+	@echo "  make run-new         - Start new RAG interface (both frontend & backend)"
+	@echo "  make dashboard       - Start the RAG monitoring dashboard"
+	@echo "  make clean           - Clean up temporary files and volumes"
 	@echo ""
 	@echo "Vector Databases:"
 	@echo "  make start-faiss     - Set VECTOR_DB to faiss (no server needed)"
@@ -47,8 +53,47 @@ help:
 install:
 	pip install -r req.txt
 
+install-frontend:
+	@echo "Installing frontend dependencies..."
+	cd frontend && npm install
+
+install-backend:
+	@echo "Backend dependencies already installed with uv"
+	@echo "Installing additional FastAPI dependencies..."
+	@if command -v uv >/dev/null 2>&1; then \
+		uv add fastapi uvicorn python-multipart websockets; \
+	else \
+		echo "uv not found, trying pip in virtual environment..."; \
+		if [ -d "venv" ]; then \
+			venv/bin/pip install fastapi uvicorn python-multipart websockets; \
+		else \
+			echo "Please install uv or set up a virtual environment"; \
+			exit 1; \
+		fi; \
+	fi
+
+install-all: install-backend install-frontend
+
 run:
-	streamlit run interface.py
+	streamlit run web.py
+
+run-frontend:
+	@echo "Starting Next.js frontend..."
+	cd frontend && npm run dev
+
+run-backend:
+	@echo "Starting FastAPI backend..."
+	@if command -v uv >/dev/null 2>&1; then \
+		uv run python api_server.py; \
+	elif [ -d "venv" ]; then \
+		venv/bin/python api_server.py; \
+	else \
+		python api_server.py; \
+	fi
+
+run-new:
+	@echo "Starting new RAG interface..."
+	./start_rag_system.sh
 
 dashboard:
 	streamlit run streamlit_dashboard.py

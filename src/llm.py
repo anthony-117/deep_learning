@@ -1,6 +1,11 @@
 from langchain_core.prompts import ChatPromptTemplate, BaseChatPromptTemplate
-from langchain_groq import ChatGroq
 from langchain_core.language_models import BaseChatModel
+from langchain_core.runnables import RunnableLambda
+
+try:
+    from langchain_groq import ChatGroq  # type: ignore
+except Exception:  # pragma: no cover
+    ChatGroq = None  # type: ignore
 
 from .config import config
 
@@ -8,11 +13,15 @@ from .config import config
 class LLMModel:
 
     def __init__(self) -> None:
-        self.llm: BaseChatModel = ChatGroq(
-            api_key = config.GROQ_API_KEY,
-            model = config.GEN_MODEL_ID,
-            temperature = config.GEN_TEMPERATURE,
-        )
+        if ChatGroq and config.GROQ_API_KEY:
+            self.llm: BaseChatModel | RunnableLambda = ChatGroq(
+                api_key=config.GROQ_API_KEY,
+                model=config.GEN_MODEL_ID,
+                temperature=config.GEN_TEMPERATURE,
+            )
+        else:
+            # Fallback runnable that returns a clear message when LLM is not configured
+            self.llm = RunnableLambda(lambda _: "LLM not configured. Set GROQ_API_KEY or update LLM backend.")
 
         self.system_prompt: ChatPromptTemplate = ChatPromptTemplate.from_template(
             """You are an assistant for question-answering tasks.

@@ -1,5 +1,5 @@
 from typing import Optional
-from langchain_huggingface.embeddings import HuggingFaceEmbeddings
+from langchain_community.embeddings import HuggingFaceEmbeddings
 from langchain_core.embeddings import Embeddings
 
 from .config import config

@@ -1,6 +1,6 @@
 from typing import Optional
 from langchain_core.documents import Document
-from langchain_milvus import Milvus
+from langchain_community.vectorstores import Milvus
 
 from langchain_core.embeddings import Embeddings
 

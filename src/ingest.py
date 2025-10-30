@@ -2,7 +2,8 @@ from typing import Optional, Iterator
 
 from colorama import Fore, Style, init
 from docling_core.transforms.chunker.hybrid_chunker import HybridChunker
-from langchain_huggingface import HuggingFaceEmbeddings
+from langchain_core.embeddings import Embeddings
+from langchain_community.embeddings import HuggingFaceEmbeddings
 
 from .processing import collect_documents_paths, convert_to_markdown, chunk
 from .vectordb import VectorStore
@@ -30,7 +31,9 @@ def ingest_pipeline(
         directory_path: Optional[str] = None,
         recursive: bool = True,
         file_extensions: Optional[list[str]] = None,
-        batch_size: int = 100
+        batch_size: int = 100,
+        embedding: Optional[Embeddings] = None,
+        drop_old: bool = False,
 ) -> VectorStore:
     """
     Complete ingestion pipeline: collect, convert, chunk, embed, and store documents.
@@ -68,9 +71,10 @@ def ingest_pipeline(
     chunk_iter = chunk(iter_document, chunker)
 
     # Step 4: Initialize embeddings and vector store
-    _print_step("🧠", "Initializing embedding model...", Fore.CYAN)
-    embedding = HuggingFaceEmbeddings()
-    _print_success("  ✅", "Embedding model loaded")
+    if embedding is None:
+        _print_step("🧠", "Initializing embedding model...", Fore.CYAN)
+        embedding = HuggingFaceEmbeddings()
+        _print_success("  ✅", "Embedding model loaded")
 
     _print_step("🗄️", "Creating vector store...", Fore.CYAN)
     vector_store = VectorStore(embedding)
@@ -87,7 +91,7 @@ def ingest_pipeline(
         # todo don't like this much
         if total_chunks == 0:
             # Create vector store with first document
-            vector_store.create_from_documents([doc])
+            vector_store.create_from_documents([doc], drop_old=drop_old)
             total_chunks += 1
             continue  # Skip adding to batch, move to next doc
 
