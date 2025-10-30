@@ -7,5 +7,7 @@ grafana-store/
 rag_logs.db
 downloads/
 temp/
-frontend/.next
-frontend/node_modules
+documents.db
+documents/
+test/
+forntend/node_modules
