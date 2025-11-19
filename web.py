@@ -18,6 +18,22 @@ st.set_page_config(
 )
 
 
+# Node name to user-friendly display mapping
+NODE_DISPLAY_NAMES = {
+    "detect_scraping": ("🔍 Detecting Intent", "Analyzing your request..."),
+    "extract_params": ("📋 Extracting Parameters", "Getting scraping details..."),
+    "scrape_papers": ("📥 Scraping Papers", "Fetching papers from sources..."),
+    "scraping_summary": ("📊 Generating Summary", "Summarizing scraped papers..."),
+    "analyze_query": ("🔍 Analyzing Query", "Understanding your question..."),
+    "improve_prompt": ("✨ Improving Query", "Optimizing search terms..."),
+    "retrieve": ("📚 Retrieving Documents", "Searching vector database..."),
+    "grade_documents": ("⚖️ Grading Documents", "Evaluating document relevance..."),
+    "generate": ("✍️ Generating Answer", "Creating response..."),
+    "check_hallucination": ("✅ Verifying Answer", "Checking answer accuracy..."),
+    "rewrite_query": ("🔄 Rewriting Query", "Refining search..."),
+}
+
+
 def is_image_document(doc) -> tuple[bool, str]:
     """
     Check if a document is an image based on its metadata.
@@ -146,6 +162,45 @@ def main():
 
                                 # Display metadata in a user-friendly way
                                 if doc.metadata:
+                                    if "title" in doc.metadata:
+                                        st.markdown(f"**Title:** {doc.metadata['title']}")
+
+                                    # PDF URL as clickable link
+                                    if "pdf_url" in doc.metadata and doc.metadata["pdf_url"]:
+                                        pdf_url = doc.metadata["pdf_url"]
+                                        st.markdown(f"**PDF:** [Open PDF]({pdf_url}) 📄")
+
+                                    # Extract page and location info from dl_meta
+                                    if "dl_meta" in doc.metadata:
+                                        dl_meta = doc.metadata["dl_meta"]
+
+                                        # Get filename
+                                        if "origin" in dl_meta and "filename" in dl_meta["origin"]:
+                                            filename = dl_meta["origin"]["filename"]
+                                            st.markdown(f"**File:** `{filename}`")
+
+                                        # Get page numbers and headings
+                                        if "doc_items" in dl_meta and dl_meta["doc_items"]:
+                                            # Collect unique page numbers from all items
+                                            pages = set()
+                                            for item in dl_meta["doc_items"]:
+                                                if "prov" in item:
+                                                    for prov in item["prov"]:
+                                                        if "page_no" in prov:
+                                                            pages.add(prov["page_no"])
+
+                                            if pages:
+                                                pages_sorted = sorted(list(pages))
+                                                if len(pages_sorted) == 1:
+                                                    st.markdown(f"**Page:** {pages_sorted[0]}")
+                                                else:
+                                                    st.markdown(f"**Pages:** {', '.join(map(str, pages_sorted))}")
+
+                                        # Get headings if available
+                                        if "headings" in dl_meta and dl_meta["headings"]:
+                                            headings_str = " > ".join(dl_meta["headings"])
+                                            st.markdown(f"**Section:** {headings_str}")
+
                                     # Domain
                                     if "domain" in doc.metadata:
                                         st.markdown(f"**Domain:** `{doc.metadata['domain']}`")
@@ -158,15 +213,7 @@ def main():
                                             full_url = f"https://{url}"
                                         else:
                                             full_url = url
-                                        st.markdown(f"**Source:** [{url}]({full_url})")
-
-                                    # Origin info
-                                    if "dl_meta" in doc.metadata and "origin" in doc.metadata["dl_meta"]:
-                                        origin = doc.metadata["dl_meta"]["origin"]
-                                        if "mimetype" in origin:
-                                            st.markdown(f"**Type:** `{origin['mimetype']}`")
-                                        if "filename" in origin:
-                                            st.markdown(f"**File:** `{origin['filename']}`")
+                                        st.markdown(f"**HTML:** [{url}]({full_url})")
 
                                 # Display image or content
                                 if is_image and image_path and Path(image_path).exists():
@@ -193,120 +240,177 @@ def main():
 
         # Generate assistant response
         with st.chat_message("assistant"):
-            with st.spinner("Thinking..."):
-                try:
-                    # Build chat history from session messages
-                    chat_history = []
-                    last_role = None
+            # Build chat history from session messages
+            chat_history = []
+            last_role = None
 
-                    for msg in st.session_state.messages[:-1]:  # Exclude current message
-                        content = msg.get("content", "")
-                        role = msg.get("role", "")
+            for msg in st.session_state.messages[:-1]:  # Exclude current message
+                content = msg.get("content", "")
+                role = msg.get("role", "")
 
-                        # Skip messages with empty or None content
-                        if not content or not role:
-                            continue
+                # Skip messages with empty or None content
+                if not content or not role:
+                    continue
 
-                        # Skip consecutive messages from the same role to maintain alternation
-                        if last_role == role:
-                            continue
+                # Skip consecutive messages from the same role to maintain alternation
+                if last_role == role:
+                    continue
 
-                        if role == "user":
-                            chat_history.append(HumanMessage(content=content))
-                            last_role = "user"
-                        elif role == "assistant":
-                            chat_history.append(AIMessage(content=content))
-                            last_role = "assistant"
+                if role == "user":
+                    chat_history.append(HumanMessage(content=content))
+                    last_role = "user"
+                elif role == "assistant":
+                    chat_history.append(AIMessage(content=content))
+                    last_role = "assistant"
 
-                    # Invoke the RAG graph with conversation history
-                    result = rag_graph.invoke(prompt, chat_history=chat_history)
+            try:
+                # Create status container for real-time updates
+                status_container = st.empty()
+                answer_container = st.empty()
 
-                    # Extract answer
-                    answer = result.get("answer", "I couldn't find a relevant answer.")
+                # Stream the RAG graph execution
+                result = None
+                current_node = None
 
-                    # Display answer
+                for output in rag_graph.stream(prompt, chat_history=chat_history):
+                    # Extract the node name from the output
+                    # Output is a dict with node name as key
+                    for node_name, node_state in output.items():
+                        current_node = node_name
+
+                        # Get display name and description
+                        if node_name in NODE_DISPLAY_NAMES:
+                            display_name, description = NODE_DISPLAY_NAMES[node_name]
+
+                            # Update status display
+                            with status_container:
+                                st.info(f"**{display_name}**\n\n{description}")
+
+                        # Store the latest result
+                        result = node_state
+
+                # Clear status after completion
+                status_container.empty()
+
+                # Extract answer from final result
+                if result:
+                    answer = result.get("generation", "I couldn't find a relevant answer.")
+                else:
+                    answer = "I couldn't find a relevant answer."
+
+                # Display answer
+                with answer_container:
                     st.markdown(answer)
 
-                    # Prepare metadata
-                    metadata = {
-                        "steps": result.get("steps", []),
-                        "documents": result.get("documents", []),
-                        "rewrites": result.get("rewrites", 0),
-                        "grounded": result.get("grounded", False)
-                    }
+                # Prepare metadata
+                metadata = {
+                    "steps": result.get("steps", []) if result else [],
+                    "documents": result.get("documents", []) if result else [],
+                    "rewrites": result.get("rewrite_count", 0) if result else 0,
+                    "grounded": result.get("answer_grounded", False) if result else False
+                }
 
-                    # Show processing steps
-                    if st.session_state.get("show_steps", False) and metadata["steps"]:
-                        with st.expander("Processing Steps"):
-                            for step in metadata["steps"]:
-                                st.text(f"- {step}")
-                            st.caption(f"Query rewrites: {metadata['rewrites']}")
-                            st.caption(f"Answer grounded: {'Yes' if metadata['grounded'] else 'No'}")
+                # Show processing steps
+                if st.session_state.get("show_steps", False) and metadata["steps"]:
+                    with st.expander("Processing Steps"):
+                        for step in metadata["steps"]:
+                            st.text(f"- {step}")
+                        st.caption(f"Query rewrites: {metadata['rewrites']}")
+                        st.caption(f"Answer grounded: {'Yes' if metadata['grounded'] else 'No'}")
 
-                    # Show source documents
-                    if st.session_state.get("show_sources", True) and metadata["documents"]:
-                        docs = metadata["documents"]
-                        with st.expander(f"Source Documents ({len(docs)})"):
-                            for i, doc in enumerate(docs):
-                                # Check if this is an image document
-                                is_image, image_path = is_image_document(doc)
+                # Show source documents
+                if st.session_state.get("show_sources", True) and metadata["documents"]:
+                    docs = metadata["documents"]
+                    with st.expander(f"Source Documents ({len(docs)})"):
+                        for i, doc in enumerate(docs):
+                            # Check if this is an image document
+                            is_image, image_path = is_image_document(doc)
 
-                                # Use appropriate icon
-                                doc_icon = "🖼️" if is_image else "📄"
-                                st.markdown(f"### {doc_icon} Document {i+1}")
+                            # Use appropriate icon
+                            doc_icon = "🖼️" if is_image else "📄"
+                            st.markdown(f"### {doc_icon} Document {i+1}")
 
-                                # Display metadata in a user-friendly way
-                                if doc.metadata:
-                                    # Domain
-                                    if "domain" in doc.metadata:
-                                        st.markdown(f"**Domain:** `{doc.metadata['domain']}`")
+                            # Display metadata in a user-friendly way
+                            if doc.metadata:
+                                if "title" in doc.metadata:
+                                    st.markdown(f"**Title:** {doc.metadata['title']}")
 
-                                    # URL as clickable link
-                                    if "url" in doc.metadata:
-                                        url = doc.metadata["url"]
-                                        # Add protocol if not present
-                                        if not url.startswith(("http://", "https://")):
-                                            full_url = f"https://{url}"
-                                        else:
-                                            full_url = url
-                                        st.markdown(f"**Source:** [{url}]({full_url})")
+                                if "source" in doc.metadata:
+                                    st.markdown(f"**Source:** `{doc.metadata['source']}`")
 
-                                    # Origin info
-                                    if "dl_meta" in doc.metadata and "origin" in doc.metadata["dl_meta"]:
-                                        origin = doc.metadata["dl_meta"]["origin"]
-                                        if "mimetype" in origin:
-                                            st.markdown(f"**Type:** `{origin['mimetype']}`")
-                                        if "filename" in origin:
-                                            st.markdown(f"**File:** `{origin['filename']}`")
+                                # PDF URL as clickable link
+                                if "pdf_url" in doc.metadata and doc.metadata["pdf_url"]:
+                                    pdf_url = doc.metadata["pdf_url"]
+                                    st.markdown(f"**PDF:** [Open PDF]({pdf_url}) 📄")
 
-                                # Display image or content
-                                if is_image and image_path and Path(image_path).exists():
-                                    st.markdown("**Image:**")
-                                    st.image(image_path, use_container_width=True)
-                                    if doc.page_content:
-                                        st.markdown("**Description:**")
-                                        st.markdown(f"> {doc.page_content}")
-                                else:
-                                    st.markdown("**Content:**")
+                                # Extract page and location info from dl_meta
+                                if "dl_meta" in doc.metadata:
+                                    dl_meta = doc.metadata["dl_meta"]
+
+                                    # Get page numbers and headings
+                                    if "doc_items" in dl_meta and dl_meta["doc_items"]:
+                                        # Collect unique page numbers from all items
+                                        pages = set()
+                                        for item in dl_meta["doc_items"]:
+                                            if "prov" in item:
+                                                for prov in item["prov"]:
+                                                    if "page_no" in prov:
+                                                        pages.add(prov["page_no"])
+
+                                        if pages:
+                                            pages_sorted = sorted(list(pages))
+                                            if len(pages_sorted) == 1:
+                                                st.markdown(f"**Page:** {pages_sorted[0]}")
+                                            else:
+                                                st.markdown(f"**Pages:** {', '.join(map(str, pages_sorted))}")
+
+                                    # Get headings if available
+                                    if "headings" in dl_meta and dl_meta["headings"]:
+                                        headings_str = " > ".join(dl_meta["headings"])
+                                        st.markdown(f"**Section:** {headings_str}")
+
+                                # Domain
+                                if "domain" in doc.metadata:
+                                    st.markdown(f"**Domain:** `{doc.metadata['domain']}`")
+
+                                # URL as clickable link
+                                if "url" in doc.metadata:
+                                    url = doc.metadata["url"]
+                                    # Add protocol if not present
+                                    if not url.startswith(("http://", "https://")):
+                                        full_url = f"https://{url}"
+                                    else:
+                                        full_url = url
+                                    st.markdown(f"**HTML:** [{url}]({full_url})")
+
+                            # Display image or content
+                            if is_image and image_path and Path(image_path).exists():
+                                st.markdown("**Image:**")
+                                st.image(image_path, use_container_width=True)
+                                if doc.page_content:
+                                    st.markdown("**Description:**")
                                     st.markdown(f"> {doc.page_content}")
+                            else:
+                                st.markdown("**Content:**")
+                                st.markdown(f"> {doc.page_content}")
 
-                                if i < len(docs) - 1:
-                                    st.divider()
+                            if i < len(docs) - 1:
+                                st.divider()
 
-                    # Add assistant message to chat history
-                    st.session_state.messages.append({
-                        "role": "assistant",
-                        "content": answer,
-                        "metadata": metadata
-                    })
+                # Add assistant message to chat history
+                st.session_state.messages.append({
+                    "role": "assistant",
+                    "content": answer,
+                    "metadata": metadata
+                })
 
-                except Exception as e:
-                    error_msg = f"Error: {str(e)}"
-                    st.error(error_msg)
-                    st.session_state.messages.append({
-                        "role": "assistant",
-                        "content": error_msg
-                    })
+            except Exception as e:
+                error_msg = f"Error: {str(e)}"
+                st.error(error_msg)
+                st.session_state.messages.append({
+                    "role": "assistant",
+                    "content": error_msg
+                })
 
 
 if __name__ == "__main__":

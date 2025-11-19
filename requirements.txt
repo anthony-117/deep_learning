@@ -11,3 +11,4 @@ requests~=2.32.5
 langgraph~=0.2.62
 colorama~=0.4.6
 pymilvus~=2.6.2
+arxiv~=2.1.3
