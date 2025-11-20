@@ -10,6 +10,16 @@ temp/
 documents.db
 documents/
 test/
+
 temp_papers/
 processed/
 *.ipynb
+/processed/
+
+# Audio files
+*.wav
+*.mp3
+*.m4a
+*.ogg
+*.flac
+audio_cache/
