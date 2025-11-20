@@ -10,8 +10,11 @@ temp/
 documents.db
 documents/
 test/
-/processed/
+
+temp_papers/
+processed/
 *.ipynb
+/processed/
 
 # Audio files
 *.wav

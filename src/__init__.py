@@ -4,3 +4,4 @@ from .vectordb import *
 from .llm import *
 from .processing import *
 from .document_store import *
+from .ingest_papers import *

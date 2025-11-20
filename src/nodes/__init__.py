@@ -7,6 +7,12 @@ from .check_hallucination import check_hallucination
 from .rewrite_query import rewrite_query
 from .decisions import decide_after_grading, decide_after_hallucination
 from .graph_state import GraphState
+from .scrape_papers import (
+    detect_scraping_request,
+    extract_scraping_params,
+    scrape_and_ingest_papers,
+    generate_scraping_summary
+)
 
 __all__ = [
     "analyze_query",
@@ -19,4 +25,8 @@ __all__ = [
     "decide_after_grading",
     "decide_after_hallucination",
     "GraphState",
+    "detect_scraping_request",
+    "extract_scraping_params",
+    "scrape_and_ingest_papers",
+    "generate_scraping_summary",
 ]
