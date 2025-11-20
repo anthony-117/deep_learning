@@ -10,3 +10,6 @@ temp/
 documents.db
 documents/
 test/
+temp_papers/
+processed/
+*.ipynb
