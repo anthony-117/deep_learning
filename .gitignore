@@ -10,3 +10,13 @@ temp/
 documents.db
 documents/
 test/
+/processed/
+*.ipynb
+
+# Audio files
+*.wav
+*.mp3
+*.m4a
+*.ogg
+*.flac
+audio_cache/
